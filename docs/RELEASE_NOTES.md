@@ -1,14 +1,14 @@
-Winora 0.1.5 for Windows 11 x64 (beta preview).
+Winora 0.1.6 for Windows 11 x64 (beta preview).
 
-- New light interface, original ribbon icon, and live desktop/taskbar preview.
-- Finish and startup selections apply immediately, with queued changes,
-  failure recovery, and retry. The Apply button has been removed.
-- Compact sidebar with Taskbar and app Settings; an icon rail in narrow windows.
-- Saved app-only Dark mode, available in Settings at the bottom of the sidebar.
-- Existing taskbar effects, persistent tray automation, saved preferences, and
-  global update controls preserved.
-- Isolated Winora Dev workflow for local UI testing without changing the installed
-  production app or Windows preferences.
+- One **Start Winora with Windows** toggle in app Settings, enabled by default.
+- Sign-in quietly restores every enabled feature, including taskbar effects and
+  tray automation, then exits without opening the settings window.
+- Removed the taskbar-specific startup control and migrated legacy per-feature
+  startup entries. Selecting the Windows default taskbar keeps app startup enabled.
+- Turning startup off leaves the current session's features running.
+- Redesigned ribbon logo used consistently in the app, executable, and installer.
+- Existing immediate finish selection, tray automation, app Dark mode, update
+  controls, and isolated development workflow preserved.
 
 Tray automation uses an undocumented Explorer visibility preference. Windows
 configurations without it are reported as unsupported; Windows-managed and
