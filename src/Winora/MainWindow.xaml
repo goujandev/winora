@@ -33,7 +33,11 @@
       </StackPanel>
      </Grid>
     </Border>
-    <TextBlock x:Name="VersionLabel" Grid.Row="2" Foreground="{StaticResource Muted}" FontSize="11" Margin="12,0,0,0" />
+    <StackPanel Grid.Row="2" Margin="12,0,8,0">
+     <TextBlock x:Name="VersionLabel" Foreground="{StaticResource Muted}" FontSize="11" Margin="0,0,0,4" />
+     <Button x:Name="UpdateButton" Content="Check for updates" Style="{StaticResource ChromeAction}" Click="OnCheckUpdates" HorizontalAlignment="Left" />
+     <TextBlock x:Name="UpdateLabel" Foreground="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0" Visibility="Collapsed" AutomationProperties.LiveSetting="Polite" />
+    </StackPanel>
    </Grid>
    <Border Grid.Column="1" Background="#202020" CornerRadius="8,0,0,0" BorderBrush="#303030" BorderThickness="1,1,0,0">
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -81,11 +85,12 @@
        <TextBlock x:Name="StatusLabel" Text="Ready." Foreground="{StaticResource Muted}" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,16,0" AutomationProperties.LiveSetting="Polite" />
        <Button x:Name="ApplyButton" Grid.Column="1" Content="Apply" MinWidth="88" Background="{StaticResource Accent}" Foreground="#12232D" BorderBrush="{StaticResource Accent}" Click="OnApply" />
       </Grid>
-      <Border BorderBrush="#383838" BorderThickness="0,1,0,0" Padding="0,16,0,0">
-       <Grid><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-        <StackPanel VerticalAlignment="Center"><TextBlock Text="Updates" FontWeight="SemiBold" /><TextBlock x:Name="UpdateLabel" Text="Checking for updates…" Foreground="{StaticResource Muted}" FontSize="12" Margin="0,5,12,0" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" /></StackPanel>
-        <Button x:Name="UpdateButton" Grid.Column="1" Content="Check for updates" Click="OnCheckUpdates" VerticalAlignment="Center" />
-       </Grid>
+      <Border BorderBrush="#383838" BorderThickness="0,1,0,0" Padding="0,18,0,0">
+       <StackPanel>
+        <CheckBox x:Name="TrayIconsCheckBox" Content="Always show app tray icons" Style="{StaticResource SettingsCheckBox}" Checked="OnTrayPreferenceChanged" Unchecked="OnTrayPreferenceChanged" ToolTip="Runs at sign-in and while Winora is closed. Applies to registered app icons; Windows controls system and temporary icons." />
+        <TextBlock Text="Keeps existing and new app icons out of the hidden tray menu." Foreground="{StaticResource Muted}" FontSize="12" TextWrapping="Wrap" Margin="30,6,0,0" />
+        <TextBlock x:Name="TrayStatusLabel" Foreground="{StaticResource Muted}" FontSize="12" TextWrapping="Wrap" Margin="30,6,0,0" Visibility="Collapsed" AutomationProperties.LiveSetting="Polite" />
+       </StackPanel>
       </Border>
       <TextBlock FontSize="11" Foreground="{StaticResource Muted}" Margin="0,18,0,0"><Hyperlink NavigateUri="https://github.com/TranslucentTB/TranslucentTB" RequestNavigate="OnNavigate" Foreground="{StaticResource Muted}" TextDecorations="None">TranslucentTB</Hyperlink></TextBlock>
      </StackPanel>

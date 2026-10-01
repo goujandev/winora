@@ -1,17 +1,16 @@
-Winora 0.1.2 for Windows 11 x64.
+Winora 0.1.3 for Windows 11 x64 (preview).
 
-- Integrated title bar with familiar window controls.
-- Compact Taskbar settings with no marketing copy.
-- Live finish preview with distinct transparent and frosted acrylic states.
-- New desktop-and-taskbar icon across the app, executable, and installer.
-- Existing taskbar effects, preferences, startup behavior, and updates preserved.
-
-- Windows 11 styled appearance settings.
-- Default, transparent, and acrylic taskbar finishes, powered by TranslucentTB.
-- Optional taskbar effects at sign-in; the settings window can exit fully.
-- Built-in update checks and downloads on app launch, with restart to install.
-- Restores the Windows taskbar when Default is applied.
-- Includes repeatable verification of updates through the public GitHub feed.
+- Compact global update checking beside the installed version, with checking,
+  current, update-ready, and retry states.
+- Optional **Always show app tray icons**, with a small native watcher that
+  promotes existing/new tray entries and restores reset visibility preferences.
+- Tray automation runs at sign-in and remains active after closing Winora,
+  independently of translucency. Turning it off stops enforcement without hiding
+  icons. Existing preferences migrate with the new option off.
+- Unsupported Windows configurations and registry failures are surfaced in the
+  tray setting. Windows-managed or deliberately hidden app icons are excluded
+  from any guarantee; the Explorer visibility preference is undocumented.
+- Existing taskbar effects, finish previews, and update installation preserved.
 
 The installer bootstraps the .NET 10 Desktop Runtime if it is missing. The native
 taskbar engine is downloaded from its official release on first use; missing

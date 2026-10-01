@@ -7,7 +7,7 @@ namespace Winora;
 [JsonConverter(typeof(JsonStringEnumConverter<TaskbarMode>))]
 public enum TaskbarMode { Default, Transparent, Acrylic }
 
-public sealed record UserSettings(TaskbarMode Mode = TaskbarMode.Default, bool StartWithWindows = false);
+public sealed record UserSettings(TaskbarMode Mode = TaskbarMode.Default, bool StartWithWindows = false, bool AlwaysShowTrayIcons = false);
 
 public static class Settings
 {

@@ -18,6 +18,7 @@ $vpk = Join-Path $workspace '.tools/vpk-1.2.0/vpk.exe'
 if (-not (Test-Path -LiteralPath $vpk)) { $vpk = (Get-Command vpk -ErrorAction Stop).Source }
 $env:DOTNET_ROOT = Split-Path $dotnet -Parent
 $publishDirectory = Join-Path $workspace ("artifacts/publish/$PackageId-$Version-" + [guid]::NewGuid().ToString('N'))
+& (Join-Path $PSScriptRoot 'Build-TrayAgent.ps1')
 & $dotnet publish (Join-Path $workspace 'src/Winora/Winora.csproj') -c Release -r win-x64 --self-contained $SelfContained.IsPresent.ToString().ToLowerInvariant() "-p:Version=$Version" -o $publishDirectory
 if ($LASTEXITCODE -ne 0) { throw 'Application publish failed.' }
 @{ RepositoryUrl = $(if ($RepositoryUrl) { $RepositoryUrl.TrimEnd('/') } else { $null }) } |

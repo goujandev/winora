@@ -6,7 +6,7 @@
     <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
     <StartupObject>Winora.Program</StartupObject>
     <AssemblyName>Winora</AssemblyName>
-    <Version>0.1.2</Version>
+    <Version>0.1.3</Version>
     <Product>Winora</Product>
     <Description>Personalise your Windows desktop.</Description>
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -17,5 +17,6 @@
     <PackageReference Include="Velopack" Version="1.2.0" />
     <Content Include="release.json" CopyToOutputDirectory="PreserveNewest" />
     <Resource Include="Assets/Winora.ico" />
+    <Content Include="../../artifacts/native/Winora.TrayAgent.exe" Link="Winora.TrayAgent.exe" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Condition="Exists('../../artifacts/native/Winora.TrayAgent.exe')" />
   </ItemGroup>
 </Project>

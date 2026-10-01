@@ -39,6 +39,18 @@
     </ControlTemplate.Triggers>
    </ControlTemplate></Setter.Value></Setter>
   </Style>
+  <Style x:Key="ChromeAction" TargetType="Button">
+   <Setter Property="Foreground" Value="{StaticResource Muted}" /><Setter Property="FontSize" Value="11" />
+   <Setter Property="Padding" Value="0,3" />
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+    <Border x:Name="Surface" Background="Transparent" Padding="{TemplateBinding Padding}"><ContentPresenter /></Border>
+    <ControlTemplate.Triggers>
+     <Trigger Property="IsMouseOver" Value="True"><Setter Property="Foreground" Value="{StaticResource Accent}" /></Trigger>
+     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Surface" Property="BorderBrush" Value="{StaticResource Accent}" /><Setter TargetName="Surface" Property="BorderThickness" Value="1" /></Trigger>
+     <Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="#858585" /></Trigger>
+    </ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
   <Style x:Key="CloseButton" TargetType="Button" BasedOn="{StaticResource CaptionButton}">
    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
     <Border x:Name="Surface" Background="Transparent"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
@@ -74,6 +86,7 @@
      <Trigger Property="IsChecked" Value="True"><Setter TargetName="Box" Property="Background" Value="{StaticResource Accent}" /><Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource Accent}" /><Setter TargetName="Tick" Property="Visibility" Value="Visible" /></Trigger>
      <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Box" Property="Opacity" Value="0.8" /></Trigger>
      <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Box" Property="BorderBrush" Value="White" /></Trigger>
+     <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5" /></Trigger>
     </ControlTemplate.Triggers>
    </ControlTemplate></Setter.Value></Setter>
   </Style>

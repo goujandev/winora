@@ -30,6 +30,10 @@ try
     Check(Settings.Load(temporary) == new UserSettings(), "Unknown persisted mode is handled safely");
     Settings.Save(new UserSettings(TaskbarMode.Acrylic, true), temporary);
     Check(Settings.Load(temporary) == new UserSettings(TaskbarMode.Acrylic, true), "Appearance and startup preference survive reload");
+    File.WriteAllText(temporary, "{\"Mode\":\"Transparent\",\"StartWithWindows\":true}");
+    Check(Settings.Load(temporary) == new UserSettings(TaskbarMode.Transparent, true, false), "Existing preferences migrate with tray automation off");
+    Settings.Save(Settings.Load(temporary) with { AlwaysShowTrayIcons = true }, temporary);
+    Check(Settings.Load(temporary) == new UserSettings(TaskbarMode.Transparent, true, true), "Tray preference persists without changing taskbar finish or startup");
 }
 finally { if (File.Exists(temporary)) File.Delete(temporary); }
 
@@ -70,4 +74,5 @@ if (args.Length == 2 && args[0] == "--engine")
     await Task.Delay(700);
     TaskbarCapture.Save(Path.Combine(output, "taskbar-restored.png"));
 }
+if (args.Length == 1 && args[0] == "--tray-live") TrayLiveCheck.Run();
 return failures == 0 ? 0 : 1;

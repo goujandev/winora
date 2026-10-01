@@ -19,6 +19,7 @@ public static class Program
             if (Velopack.Locators.VelopackLocator.Current.AppId != "Winora") return;
             TaskbarService.SetStartup(false);
             TaskbarService.StopAsync().GetAwaiter().GetResult();
+            TrayIconService.DisableAsync().GetAwaiter().GetResult();
         }).Run();
         if (args.Length == 0 && Environment.GetEnvironmentVariable("WINORA_STARTUP_PROBE") is { Length: > 0 } probePath)
             args = ["--update-probe", probePath];
