@@ -4,11 +4,37 @@ using System.Windows.Navigation;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Interop;
+using System.Runtime.InteropServices;
 
 namespace Winora;
 
 public partial class MainWindow : Window
 {
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        var handle = new WindowInteropHelper(this).Handle;
+        var enabled = 1;
+        _ = DwmSetWindowAttribute(handle, 20 /* immersive dark mode */, ref enabled, sizeof(int));
+    }
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(nint window, int attribute, ref int value, int size);
+
+    private void OnMinimize(object sender, RoutedEventArgs e) => SystemCommands.MinimizeWindow(this);
+    private void OnMaximize(object sender, RoutedEventArgs e)
+    {
+        if (WindowState == WindowState.Maximized) SystemCommands.RestoreWindow(this);
+        else SystemCommands.MaximizeWindow(this);
+    }
+    private void OnClose(object sender, RoutedEventArgs e) => SystemCommands.CloseWindow(this);
+    private void OnWindowStateChanged(object? sender, EventArgs e)
+    {
+        WindowSurface.Margin = WindowState == WindowState.Maximized ? new Thickness(8) : new Thickness(0);
+        MaximizeButton.Content = WindowState == WindowState.Maximized ? "\uE923" : "\uE922";
+        MaximizeButton.ToolTip = WindowState == WindowState.Maximized ? "Restore" : "Maximize";
+        System.Windows.Automation.AutomationProperties.SetName(MaximizeButton, MaximizeButton.ToolTip.ToString());
+    }
     private readonly bool previewOnly;
     private readonly TaskbarService taskbar = new();
     private readonly UpdateService updates = new();
@@ -58,11 +84,13 @@ public partial class MainWindow : Window
         selectedMode = Enum.Parse<TaskbarMode>(tag);
         var color = selectedMode switch
         {
-            TaskbarMode.Transparent => Color.FromArgb(20, 32, 39, 55),
-            TaskbarMode.Acrylic => Color.FromArgb(150, 54, 62, 84),
-            _ => Color.FromArgb(238, 32, 39, 55)
+            TaskbarMode.Transparent => Color.FromArgb(0, 32, 39, 55),
+            TaskbarMode.Acrylic => Color.FromArgb(112, 32, 39, 55),
+            _ => Color.FromArgb(238, 32, 32, 32)
         };
         PreviewBar.Background = new SolidColorBrush(color);
+        AcrylicBackdrop.Visibility = selectedMode == TaskbarMode.Acrylic ? Visibility.Visible : Visibility.Collapsed;
+        PreviewModeLabel.Text = selectedMode.ToString();
     }
 
     private async void OnApply(object sender, RoutedEventArgs e)

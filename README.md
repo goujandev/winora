@@ -9,7 +9,7 @@ Download `Winora-win-Setup.exe` from
 [GitHub Releases](https://github.com/goujandev/winora/releases).
 Windows 11 **x64** is required. The preview installer is unsigned.
 
-Choose Default, Transparent, or Acrylic, then select **Apply appearance**.
+Choose Default, Transparent, or Acrylic, then select **Apply**.
 The settings window exits completely when closed. The separate native engine
 maintains the taskbar effect and keeps its original TranslucentTB tray menu as
 an independent exit route. Default stops the engine and restores Windows.

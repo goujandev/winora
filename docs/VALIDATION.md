@@ -30,6 +30,13 @@ are not sufficient proof of visual correctness in this environment. A manual
 check of the visible taskbar, a real Explorer restart, monitor changes, sleep /
 resume, and other Windows 11 builds remains necessary before a production claim.
 
+UI refinement (0.1.2): Release builds passed with no warnings or errors; the
+existing eleven configuration checks passed. Offscreen WPF renders were reviewed
+at 780 x 650 and 680 x 650, including Default, Transparent, and Acrylic previews.
+The installer was packaged with the new multi-resolution application icon.
+Window chrome uses WPF WindowChrome and standard system window commands; actual
+pointer interactions and Windows Snap behavior still need a desktop smoke check.
+
 The installer is unsigned. First-run downloads of missing shared frameworks
 are additional to the installer size. Runtime bootstrap may require Windows
 elevation. Background memory reduction is the main remaining architecture target.

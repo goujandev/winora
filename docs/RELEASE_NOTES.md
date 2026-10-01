@@ -1,4 +1,10 @@
-Winora preview for Windows 11 x64.
+Winora 0.1.2 for Windows 11 x64.
+
+- Integrated title bar with familiar window controls.
+- Compact Taskbar settings with no marketing copy.
+- Live finish preview with distinct transparent and frosted acrylic states.
+- New desktop-and-taskbar icon across the app, executable, and installer.
+- Existing taskbar effects, preferences, startup behavior, and updates preserved.
 
 - Windows 11 styled appearance settings.
 - Default, transparent, and acrylic taskbar finishes, powered by TranslucentTB.

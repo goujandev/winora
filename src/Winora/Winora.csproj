@@ -6,14 +6,16 @@
     <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
     <StartupObject>Winora.Program</StartupObject>
     <AssemblyName>Winora</AssemblyName>
-    <Version>0.1.1</Version>
+    <Version>0.1.2</Version>
     <Product>Winora</Product>
     <Description>Personalise your Windows desktop.</Description>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets/Winora.ico</ApplicationIcon>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Velopack" Version="1.2.0" />
     <Content Include="release.json" CopyToOutputDirectory="PreserveNewest" />
+    <Resource Include="Assets/Winora.ico" />
   </ItemGroup>
 </Project>

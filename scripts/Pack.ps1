@@ -27,6 +27,7 @@ Copy-Item -LiteralPath (Join-Path $workspace 'licenses') -Destination $publishDi
 $packageTitle = if ($PackageId -eq 'Winora.UpdateTest') { 'Winora Update Check' } else { 'Winora' }
 $packArguments = @('pack', '--packId', $PackageId, '--packVersion', $Version, '--packDir', $publishDirectory,
     '--mainExe', 'Winora.exe', '--packTitle', $packageTitle, '--packAuthors', 'goujan', '--runtime', 'win-x64',
+    '--icon', (Join-Path $workspace 'src/Winora/Assets/Winora.ico'),
     '--outputDir', $OutputDirectory, '--shortcuts', 'StartMenuRoot', '--noPortable', '--skip-updates')
 if (-not $SelfContained) { $packArguments += @('--framework', 'net10.0-x64-desktop') }
 & $vpk @packArguments

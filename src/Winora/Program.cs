@@ -40,14 +40,22 @@ public static class Program
             }
             var app = new App();
             app.InitializeComponent();
-            if (args.Length == 2 && args[0] == "--render-preview")
+            if (args.Length >= 2 && args[0] == "--render-preview")
             {
-                var window = new MainWindow(previewOnly: true) { Width = 960, Height = 800 };
+                var width = args.Length >= 5 ? int.Parse(args[3]) : 780;
+                var height = args.Length >= 5 ? int.Parse(args[4]) : 650;
+                var window = new MainWindow(previewOnly: true) { Width = width, Height = height };
+                if (args.Length >= 3)
+                {
+                    var mode = Enum.Parse<TaskbarMode>(args[2]);
+                    if (mode == TaskbarMode.Default) window.DefaultMode.IsChecked = true;
+                    else if (mode == TaskbarMode.Acrylic) window.AcrylicMode.IsChecked = true;
+                }
                 var content = (FrameworkElement)window.Content;
-                content.Measure(new Size(960, 800));
-                content.Arrange(new Rect(0, 0, 960, 800));
+                content.Measure(new Size(width, height));
+                content.Arrange(new Rect(0, 0, width, height));
                 content.UpdateLayout();
-                var bitmap = new RenderTargetBitmap(960, 800, 96, 96, PixelFormats.Pbgra32);
+                var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
                 bitmap.Render(content);
                 var encoder = new PngBitmapEncoder();
                 encoder.Frames.Add(BitmapFrame.Create(bitmap));
