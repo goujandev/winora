@@ -34,6 +34,7 @@ public static class Program
             if (AppBuild.IsDevelopment && args.Contains("--test-tiling") && !args.Contains("--render-preview"))
                 AppBuild.EnableTilingTest();
             if (args.Contains("--launch-tiling")) return TilingService.LaunchEngine();
+            if (args.Contains("--route-fullscreen")) return FullscreenRoutingWorker.RunAsync().GetAwaiter().GetResult();
             if (args.Length >= 2 && args[0] == "--update-probe")
             {
                 var updates = new UpdateService();
@@ -101,7 +102,7 @@ public static class Program
         catch (Exception error)
         {
             LogError(error);
-            if (!args.Contains("--render-preview") && !args.Contains("--update-probe") && !args.Contains("--startup") && !args.Contains("--launch-tiling"))
+            if (!args.Contains("--render-preview") && !args.Contains("--update-probe") && !args.Contains("--startup") && !args.Contains("--launch-tiling") && !args.Contains("--route-fullscreen"))
                 MessageBox.Show(error.Message, AppBuild.Name, MessageBoxButton.OK, MessageBoxImage.Error);
             return 1;
         }

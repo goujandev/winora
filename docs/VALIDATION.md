@@ -4,6 +4,30 @@ Development PC: Windows 11 25H2, build 26200.9457, x64.
 
 ## Experimental tiling (development branch)
 
+Fullscreen-game routing verification:
+
+- 102 production checks and 44 isolated Dev checks pass, including 31 routing
+  policy scenarios and fullscreen preference failure/Retry behavior.
+- A bounded live fixture managed only four disposable tiled windows, one
+  fullscreen window explicitly configured as a game, and a floating test
+  control. Real everyday application windows were excluded; shortcuts were off.
+- The four tiles moved physically from the main monitor to the other two
+  monitors, two per monitor. The fullscreen window retained native focus. Tiles
+  returned to their original monitor after fullscreen ended. Routing OFF stopped
+  its helper; tiling OFF restored the original native rectangles.
+- All 13 live checks passed. Production preferences were unchanged, and test
+  preferences, configuration, journals and log contents were restored afterward.
+- After warmup, a ten-second sample while the simulated game stayed fullscreen
+  measured approximately 58 MiB working set, 21 MiB private memory, and 2.97% of
+  one CPU core for the routing helper. This is one sample on this PC, not a
+  hardware-independent performance guarantee. The helper runs only while both
+  tiling and its fullscreen-game preference are enabled.
+- The compact tiling controls were inspected in an offscreen dark render.
+  Real exclusive-mode games, other graphics APIs, elevated games, anti-cheat,
+  sleep/resume and monitor hotplug still need hands-on beta testing. Borderless
+  detection uses an explicit game executable choice; automatic exclusive
+  Direct3D detection follows the documented Windows notification-state API.
+
 - Release and Development builds compile without warnings or errors.
 - Production configuration checks cover opt-in migration, gap persistence and
   bounds, independent feature restoration through the existing global startup

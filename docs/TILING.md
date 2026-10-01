@@ -37,6 +37,43 @@ frames, fixed sizes, or elevated privileges may not arrange normally. Pause,
 float an affected window, or disable tiling if an application behaves poorly.
 The engine's own tray menu remains available as an independent recovery route.
 
+## Fullscreen games
+
+**Move tiles away from fullscreen games** is enabled by default when tiling is
+on. After a game settles into fullscreen, Winora distributes background tiles
+across the other available monitors, favouring monitors with fewer tiled apps.
+New tiles on the occupied monitor are handled too. Floating, hidden, minimised,
+dragged and focused windows remain untouched. With one monitor, or no available
+destination, the existing windows stay behind the game.
+
+Windows positively reports exclusive Direct3D fullscreen through
+[SHQueryUserNotificationState](https://learn.microsoft.com/en-us/windows/win32/api/shellapi/ne-shellapi-query_user_notification_state).
+For borderless games, choose **Games… → Add game…** and select the game's actual
+executable, rather than its launcher. Other graphics APIs may also require this
+selection. Fullscreen browser/video windows reserve their monitor but do not
+trigger redistribution unless you explicitly add their application or they use
+exclusive Direct3D themselves. Windows reports a graphics mode, not a game label.
+
+When fullscreen ends, surviving background tiles return to their original
+physical monitors once available. Moving an app to another monitor/workspace,
+or switching it out of tiling, takes precedence over automatic restoration.
+The engine rebuilds the tiling layout; the previous split order is not guaranteed.
+Focused apps are deferred to avoid interrupting what you are using. For games
+excluded from GlazeWM, one background app may also remain behind because the
+engine still considers it focused; Winora reports this limitation.
+
+Pausing tiling pauses redistribution. Switching the fullscreen preference off
+returns eligible background tiles, even if the game is still fullscreen, and
+stops its helper. Focused tiles can remain on their current monitor; the status
+reports that. Turning tiling off restores the usual saved pre-tiling positions.
+
+This preference adds one headless Winora process only while its owned tiling
+engine is running and the preference is enabled. It shares the existing runtime,
+keeps its journal/status in Winora's own tiling data directory, and continues
+after closing the production settings window. Routing failures expose **Retry**.
+Ordinary Dev preview never starts this process; live Dev closing stops it along
+with its test engine.
+
 For local testing, run `.\dev.cmd -TestTiling`, then enable the toggle. The
 **LIVE TILING TEST** build keeps preferences and engine files under
 `%LocalAppData%\WinoraDev\tiling`; production uses `%LocalAppData%\Winora\tiling`.

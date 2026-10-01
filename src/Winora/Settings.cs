@@ -8,7 +8,8 @@ namespace Winora;
 public enum TaskbarMode { Default, Transparent, Acrylic }
 
 public sealed record UserSettings(TaskbarMode Mode = TaskbarMode.Default, bool AlwaysShowTrayIcons = false,
-    bool DarkMode = false, bool StartWinoraWithWindows = true, bool TilingEnabled = false, int TilingGap = 8);
+    bool DarkMode = false, bool StartWinoraWithWindows = true, bool TilingEnabled = false, int TilingGap = 8,
+    bool MoveTilesForFullscreenGames = true, string[]? FullscreenGameExecutables = null);
 
 public static class Settings
 {
@@ -40,6 +41,21 @@ public static class Settings
 
     private static UserSettings Normalize(UserSettings settings) => settings with
     {
-        TilingGap = Math.Clamp(settings.TilingGap, TilingConfiguration.MinimumGap, TilingConfiguration.MaximumGap)
+        TilingGap = Math.Clamp(settings.TilingGap, TilingConfiguration.MinimumGap, TilingConfiguration.MaximumGap),
+        FullscreenGameExecutables = NormalizeGames(settings.FullscreenGameExecutables)
     };
+
+    private static string[]? NormalizeGames(string[]? games)
+    {
+        if (games is null) return null;
+        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var game in games)
+        {
+            if (string.IsNullOrWhiteSpace(game) || !Path.IsPathFullyQualified(game)
+                || !string.Equals(Path.GetExtension(game), ".exe", StringComparison.OrdinalIgnoreCase)) continue;
+            try { paths.Add(Path.GetFullPath(game)); }
+            catch (Exception error) when (error is ArgumentException or NotSupportedException) { }
+        }
+        return paths.Count == 0 ? null : paths.Order(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
 }

@@ -45,7 +45,7 @@ public sealed class TilingService
             await TilingProvisioner.EnsureAsync(progress);
             using var existing = FindOwnedProcess();
             if (existing is not null)
-            { await ChangeConfigurationAsync(gap); return; }
+            { await ChangeConfigurationAsync(gap); await RefreshFullscreenRoutingCoreAsync(); return; }
             ThrowIfForeignManagerRunning();
             if (ListenerOwner() is not null)
                 throw new InvalidOperationException("Another application is using the tiling engine’s local connection. Close it before enabling tiling.");
@@ -70,6 +70,7 @@ public sealed class TilingService
             for (var attempt = 0; attempt < 40; attempt++)
             {
                 await Task.Delay(150);
+                var ready = false;
                 try
                 {
                     using var metadata = await SendAsync("query app-metadata");
@@ -79,10 +80,11 @@ public sealed class TilingService
                     using var engine = FindOwnedProcess() ?? throw new InvalidOperationException("The tiling engine stopped during startup.");
                     var managed = await QueryManagedHandlesAsync();
                     SaveManagedHandles(engine, managed);
-                    return;
+                    ready = true;
                 }
                 catch (Exception error) when (error is InvalidOperationException or WebSocketException or OperationCanceledException or JsonException)
                 { lastError = error; }
+                if (ready) { await RefreshFullscreenRoutingCoreAsync(); return; }
             }
             throw new InvalidOperationException("The tiling engine didn’t become ready. Try again, or use Exit from its tray icon.", lastError);
         }
@@ -192,7 +194,20 @@ public sealed class TilingService
         {
             using var response = await SendAsync("query paused");
             var paused = response.RootElement.GetProperty("data").GetBoolean();
-            return new(true, paused, paused ? "Paused" : "Tiling active");
+            var message = paused ? "Paused" : "Tiling active";
+            var responsive = true;
+            if (Settings.Load().MoveTilesForFullscreenGames)
+            {
+                var routing = FullscreenRoutingWorker.ReadStatus();
+                using var worker = FindRoutingWorker(routing);
+                if (routing?.Error == true) { message += $" · {routing.Message}"; responsive = false; }
+                else if (worker is null || routing is { Stopped: true })
+                { message += " · Fullscreen routing stopped; retry to restart it"; responsive = false; }
+                else if (!paused && !string.IsNullOrWhiteSpace(routing?.Message)) message += $" · {routing.Message}";
+            }
+            else if (FullscreenRoutingWorker.ReadStatus() is { Stopped: true, Error: false, Message.Length: > 0 } finished)
+                message += $" · {finished.Message}";
+            return new(true, paused, message, Responsive: responsive);
         }
         catch (Exception error) when (error is InvalidOperationException or WebSocketException or OperationCanceledException or JsonException or Win32Exception)
         { return new(true, false, "Tiling isn’t responding. Use its tray icon to exit, then retry.", Responsive: false); }
@@ -208,6 +223,9 @@ public sealed class TilingService
 
     private static async Task DisableCoreAsync()
     {
+        // Return routed apps while the manager still owns its tiling tree.
+        // The ordinary pre-tiling placement restore below follows engine exit.
+        await StopFullscreenRoutingCoreAsync(throwOnRestoreFailure: false);
         using var process = FindOwnedProcess();
         if (process is null) { await StopOwnedWatchersAsync(); return; }
         var managed = ReadManagedHandles(process);
@@ -235,6 +253,99 @@ public sealed class TilingService
         RestoreWindowPositions(managed);
         if (File.Exists(SnapshotPath)) File.Delete(SnapshotPath);
         if (File.Exists(ManagedPath)) File.Delete(ManagedPath);
+        if (File.Exists(FullscreenRoutingWorker.JournalPath)) File.Delete(FullscreenRoutingWorker.JournalPath);
+    }
+
+    public async Task RefreshFullscreenRoutingAsync()
+    {
+        if (!AppBuild.AllowTilingEffects) return;
+        await Changes.WaitAsync();
+        try { await RefreshFullscreenRoutingCoreAsync(); }
+        finally { Changes.Release(); }
+    }
+
+    private static async Task RefreshFullscreenRoutingCoreAsync()
+    {
+        if (!AppBuild.AllowTilingEffects) return;
+        using var engine = FindOwnedProcess();
+        if (engine is null || !Settings.Load().MoveTilesForFullscreenGames)
+        { await StopFullscreenRoutingCoreAsync(throwOnRestoreFailure: true); return; }
+        var previous = FullscreenRoutingWorker.ReadStatus();
+        using (var existing = FindRoutingWorker(previous))
+            if (existing is not null && previous is { Ready: true, Stopped: false, Error: false } &&
+                previous.EngineProcessId == engine.Id && previous.EngineProcessStart == engine.StartTime.ToUniversalTime().Ticks) return;
+        await StopFullscreenRoutingCoreAsync(throwOnRestoreFailure: false);
+        if (File.Exists(FullscreenRoutingWorker.StopPath)) File.Delete(FullscreenRoutingWorker.StopPath);
+        var appHost = Path.Combine(AppContext.BaseDirectory, AppBuild.IsDevelopment ? "Winora.Dev.exe" : "Winora.exe");
+        var start = new ProcessStartInfo(appHost)
+        { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = AppContext.BaseDirectory };
+        if (AppBuild.IsDevelopment) start.ArgumentList.Add("--test-tiling");
+        start.ArgumentList.Add("--route-fullscreen");
+        using var worker = Process.Start(start) ?? throw new InvalidOperationException("Windows couldn’t start fullscreen routing.");
+        var started = worker.StartTime.ToUniversalTime().Ticks;
+        var deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(10);
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            var state = FullscreenRoutingWorker.ReadStatus();
+            if (state is not null && state.ProcessId == worker.Id && state.ProcessStart == started)
+            {
+                if (state.Error || state.Stopped) throw new InvalidOperationException(state.Message.Length > 0 ? state.Message : "Fullscreen routing stopped during startup.");
+                using var verified = FindRoutingWorker(state);
+                if (verified is not null && state.Ready) return;
+            }
+            if (worker.HasExited) throw new InvalidOperationException("Fullscreen routing couldn’t start. Check Winora’s error log and retry.");
+            await Task.Delay(100);
+        }
+        // This Process was created directly above; no other instance is killed.
+        if (!worker.HasExited) worker.Kill();
+        throw new TimeoutException("Fullscreen routing took too long to start. Try again.");
+    }
+
+    private static async Task StopFullscreenRoutingCoreAsync(bool throwOnRestoreFailure)
+    {
+        var status = FullscreenRoutingWorker.ReadStatus();
+        using var worker = FindRoutingWorker(status);
+        if (worker is null)
+        {
+            using var engine = FindOwnedProcess();
+            if (throwOnRestoreFailure && status is { Error: true } && engine is not null &&
+                status.EngineProcessId == engine.Id && status.EngineProcessStart == engine.StartTime.ToUniversalTime().Ticks &&
+                FullscreenRoutingWorker.HasPendingJournal(engine))
+                throw new InvalidOperationException(status.Message);
+            return;
+        }
+        FullscreenRoutingWorker.WriteStop(status!);
+        if (!await WaitForExitAsync(worker, TimeSpan.FromSeconds(12)))
+        {
+            using var verified = FindRoutingWorker(status);
+            if (verified is null || verified.Id != worker.Id)
+                throw new InvalidOperationException("Winora couldn’t identify its fullscreen helper to stop it safely.");
+            worker.Kill();
+            if (!await WaitForExitAsync(worker, TimeSpan.FromSeconds(3)))
+                throw new InvalidOperationException("Fullscreen routing is still closing. Try again.");
+            if (throwOnRestoreFailure)
+                throw new InvalidOperationException("Fullscreen routing stopped, but some apps couldn’t be returned. Retry, or turn tiling off to restore their original positions.");
+        }
+        else if (throwOnRestoreFailure && FullscreenRoutingWorker.ReadStatus() is { Error: true } finished)
+            throw new InvalidOperationException(finished.Message);
+    }
+
+    private static Process? FindRoutingWorker(FullscreenRoutingStatus? status)
+    {
+        if (status is null || status.ProcessId <= 0 || status.ProcessStart <= 0 || string.IsNullOrWhiteSpace(status.Executable)) return null;
+        Process? process = null;
+        try
+        {
+            process = Process.GetProcessById(status.ProcessId);
+            using var current = Process.GetCurrentProcess();
+            var expected = Path.Combine(AppContext.BaseDirectory, AppBuild.IsDevelopment ? "Winora.Dev.exe" : "Winora.exe");
+            if (process.SessionId == current.SessionId && process.StartTime.ToUniversalTime().Ticks == status.ProcessStart &&
+                string.Equals(Path.GetFullPath(status.Executable), expected, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(process.MainModule?.FileName, status.Executable, StringComparison.OrdinalIgnoreCase)) return process;
+        }
+        catch (Exception error) when (error is Win32Exception or InvalidOperationException or ArgumentException or IOException) { }
+        process?.Dispose();
+        return null;
     }
 
     private static async Task<bool> WaitForExitAsync(Process process, TimeSpan wait)
@@ -305,7 +416,76 @@ public sealed class TilingService
         File.Move(temporary, ConfigurationPath, overwrite: true);
     }
 
-    private static async Task<JsonDocument> SendAsync(string command)
+    internal static Task<JsonDocument> SendAsync(string command) => SendCoreAsync(command);
+    internal static Task<JsonDocument> SendBoundAsync(string command, EngineSession session) => session.SendAsync(command);
+
+    // A retained kernel handle binds the worker to one verified process object,
+    // including across PID reuse, without rescanning every process for each query.
+    internal sealed class EngineSession : IDisposable
+    {
+        private readonly nint handle;
+        private readonly SemaphoreSlim messages = new(1, 1);
+        private readonly byte[] receiveBuffer = new byte[8192];
+        private ClientWebSocket? socket;
+        internal int ProcessId { get; }
+        internal bool IsAlive => WaitForSingleObject(handle, 0) == 258 /* WAIT_TIMEOUT */;
+
+        internal EngineSession(Process process)
+        {
+            ProcessId = process.Id;
+            handle = OpenProcess(0x00101000 /* SYNCHRONIZE | QUERY_LIMITED_INFORMATION */, false, (uint)ProcessId);
+            if (handle == 0) throw new Win32Exception(Marshal.GetLastWin32Error());
+            try
+            {
+                var path = new StringBuilder(1024);
+                var length = path.Capacity;
+                using var current = Process.GetCurrentProcess();
+                if (!QueryFullProcessImageName(handle, 0, path, ref length) || !IsOwnedPath(path.ToString()) ||
+                    !ProcessIdToSessionId((uint)ProcessId, out var session) || session != current.SessionId ||
+                    !GetProcessTimes(handle, out var created, out _, out _, out _) ||
+                    DateTime.FromFileTimeUtc(created).Ticks != process.StartTime.ToUniversalTime().Ticks || !IsAlive)
+                    throw new InvalidOperationException("Winora couldn’t bind fullscreen routing to its own tiling engine.");
+            }
+            catch { _ = CloseHandle(handle); throw; }
+        }
+
+        internal async Task<JsonDocument> SendAsync(string command)
+        {
+            await messages.WaitAsync();
+            try
+            {
+                if (!IsAlive) throw new InvalidOperationException("The tiling engine stopped.");
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                if (socket is null)
+                {
+                    if (ListenerOwner() != ProcessId)
+                        throw new InvalidOperationException("Winora couldn’t verify the tiling engine’s local connection.");
+                    socket = new ClientWebSocket();
+                    socket.Options.Proxy = null;
+                    await socket.ConnectAsync(new Uri($"ws://127.0.0.1:{IpcPort}"), timeout.Token);
+                    if (ListenerOwner() != ProcessId || !IsAlive)
+                        throw new InvalidOperationException("The tiling engine’s connection changed. Try again.");
+                }
+                // This connected socket is pinned to the verified server. Its
+                // peer cannot turn into a new listener; the retained kernel
+                // handle also prevents accepting a recycled process ID.
+                var response = await SendReceiveAsync(socket, command, receiveBuffer, timeout.Token);
+                if (!IsAlive) { response.Dispose(); throw new InvalidOperationException("The tiling engine stopped."); }
+                return response;
+            }
+            catch { socket?.Dispose(); socket = null; throw; }
+            finally { messages.Release(); }
+        }
+
+        public void Dispose()
+        {
+            socket?.Dispose();
+            messages.Dispose();
+            _ = CloseHandle(handle);
+        }
+    }
+
+    private static async Task<JsonDocument> SendCoreAsync(string command)
     {
         using var process = FindOwnedProcess() ?? throw new InvalidOperationException("The tiling engine isn’t running.");
         if (ListenerOwner() != process.Id)
@@ -318,13 +498,17 @@ public sealed class TilingService
         // the upstream engine’s shared local IPC port.
         if (ListenerOwner() != process.Id || process.HasExited)
             throw new InvalidOperationException("The tiling engine’s connection changed. Try again.");
-        await socket.SendAsync(Encoding.UTF8.GetBytes(command).AsMemory(), WebSocketMessageType.Text, true, timeout.Token);
+        return await SendReceiveAsync(socket, command, new byte[8192], timeout.Token);
+    }
+
+    private static async Task<JsonDocument> SendReceiveAsync(ClientWebSocket socket, string command, byte[] buffer, CancellationToken cancellation)
+    {
+        await socket.SendAsync(Encoding.UTF8.GetBytes(command).AsMemory(), WebSocketMessageType.Text, true, cancellation);
         using var data = new MemoryStream();
-        var buffer = new byte[8192];
         ValueWebSocketReceiveResult received;
         do
         {
-            received = await socket.ReceiveAsync(buffer.AsMemory(), timeout.Token);
+            received = await socket.ReceiveAsync(buffer.AsMemory(), cancellation);
             if (received.MessageType != WebSocketMessageType.Text)
                 throw new InvalidOperationException("The tiling engine returned an unexpected response.");
             data.Write(buffer, 0, received.Count);
@@ -340,7 +524,7 @@ public sealed class TilingService
         return response;
     }
 
-    private static Process? FindOwnedProcess()
+    internal static Process? FindOwnedProcess()
     {
         using var current = Process.GetCurrentProcess();
         foreach (var process in Process.GetProcessesByName("glazewm"))
@@ -475,4 +659,10 @@ public sealed class TilingService
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(nint window, out uint processId);
     [DllImport("user32.dll")] private static extern bool GetWindowPlacement(nint window, ref WindowPlacement placement);
     [DllImport("user32.dll")] private static extern bool SetWindowPlacement(nint window, in WindowPlacement placement);
+    [DllImport("kernel32.dll", SetLastError = true)] private static extern nint OpenProcess(uint access, bool inherit, uint processId);
+    [DllImport("kernel32.dll")] private static extern uint WaitForSingleObject(nint handle, uint milliseconds);
+    [DllImport("kernel32.dll")] private static extern bool ProcessIdToSessionId(uint processId, out uint sessionId);
+    [DllImport("kernel32.dll")] private static extern bool GetProcessTimes(nint process, out long creation, out long exit, out long kernel, out long user);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, EntryPoint = "QueryFullProcessImageNameW")] private static extern bool QueryFullProcessImageName(nint process, uint flags, StringBuilder path, ref int length);
+    [DllImport("kernel32.dll")] private static extern bool CloseHandle(nint handle);
 }

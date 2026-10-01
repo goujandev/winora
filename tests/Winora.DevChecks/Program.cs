@@ -117,6 +117,8 @@ internal static class DevChecks
             ((CheckBox)window.FindName("DarkModeCheckBox")).IsChecked = true;
             ((CheckBox)window.FindName("TilingEnabledCheckBox")).IsChecked = true;
             ((Slider)window.FindName("TilingGapSlider")).Value = 24;
+            ((CheckBox)window.FindName("FullscreenRoutingCheckBox")).IsChecked = false;
+            ((CheckBox)window.FindName("FullscreenRoutingCheckBox")).IsChecked = true;
             Check(previewPreferences.SequenceEqual(File.ReadAllBytes(Settings.FilePath)), "Offscreen preview interactions never save preferences");
 
             var liveWindow = new MainWindow();
@@ -197,6 +199,41 @@ internal static class DevChecks
                 "Changing the tiling gap updates both the preview spacing and only its saved setting");
             Check(!new TilingService().IsRunning,
                 "Normal Dev tiling interactions never start a real window-management engine");
+            var fullscreenRouting = (CheckBox)liveWindow.FindName("FullscreenRoutingCheckBox");
+            Check(fullscreenRouting.IsChecked == true && Settings.Load().MoveTilesForFullscreenGames,
+                "Moving tiles away from fullscreen games is enabled by default");
+            var beforeFullscreenRouting = Settings.Load();
+            liveWindow.Dispatcher.BeginInvoke(new Action(() => fullscreenRouting.IsChecked = false));
+            Check(PumpUntil(() => !Settings.Load().MoveTilesForFullscreenGames && fullscreenRouting.IsEnabled)
+                && Settings.Load() == (beforeFullscreenRouting with { MoveTilesForFullscreenGames = false }),
+                "Disabling fullscreen-game routing saves only its isolated Dev preference");
+            liveWindow.Dispatcher.BeginInvoke(new Action(() => fullscreenRouting.IsChecked = true));
+            Check(PumpUntil(() => Settings.Load().MoveTilesForFullscreenGames && fullscreenRouting.IsEnabled)
+                && Settings.Load() == beforeFullscreenRouting && !new TilingService().IsRunning,
+                "Fullscreen-game routing can be restored without starting an engine or changing other preferences");
+            var routingTemporaryBefore = File.Exists(temporaryPreferences) ? File.ReadAllBytes(temporaryPreferences) : null;
+            try
+            {
+                using (var lockedPreferences = new FileStream(temporaryPreferences, FileMode.OpenOrCreate,
+                    FileAccess.ReadWrite, FileShare.None))
+                {
+                    liveWindow.Dispatcher.BeginInvoke(new Action(() => fullscreenRouting.IsChecked = false));
+                    Check(PumpUntil(() => tilingRetry.Visibility == Visibility.Visible && tilingRetry.IsEnabled
+                        && fullscreenRouting.IsEnabled && fullscreenRouting.IsChecked == true
+                        && Settings.Load().MoveTilesForFullscreenGames && tilingStatus.Text.Contains("fullscreen routing")),
+                        "A failed fullscreen-routing save restores its toggle and exposes Retry");
+                }
+                liveWindow.Dispatcher.BeginInvoke(new Action(() =>
+                    tilingRetry.RaiseEvent(new RoutedEventArgs(Button.ClickEvent, tilingRetry))));
+                Check(PumpUntil(() => fullscreenRouting.IsChecked == false && fullscreenRouting.IsEnabled
+                    && !Settings.Load().MoveTilesForFullscreenGames && tilingRetry.Visibility == Visibility.Collapsed)
+                    && Settings.Load() == (beforeFullscreenRouting with { MoveTilesForFullscreenGames = false }),
+                    "Fullscreen-routing Retry reapplies the failed OFF request while preserving other settings");
+            }
+            finally { Restore(temporaryPreferences, routingTemporaryBefore); }
+            liveWindow.Dispatcher.BeginInvoke(new Action(() => fullscreenRouting.IsChecked = true));
+            if (!PumpUntil(() => Settings.Load().MoveTilesForFullscreenGames && fullscreenRouting.IsEnabled))
+                throw new InvalidOperationException("Could not restore the fullscreen-routing preference after the retry check.");
             ((RadioButton)liveWindow.FindName("SettingsNavigation")).IsChecked = true;
             Check(((FrameworkElement)liveWindow.FindName("SettingsPage")).Visibility == Visibility.Visible
                 && ((FrameworkElement)liveWindow.FindName("TaskbarPage")).Visibility == Visibility.Collapsed

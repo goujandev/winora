@@ -62,12 +62,26 @@ try
     File.WriteAllText(temporary, "{\"Mode\":\"Acrylic\",\"AlwaysShowTrayIcons\":true,\"DarkMode\":true,\"StartWinoraWithWindows\":false,\"TilingEnabled\":true,\"TilingGap\":100}");
     Check(Settings.Load(temporary) == (tilingPreferences with { TilingGap = 32 }),
         "An excessive tiling gap is clamped without discarding existing feature preferences");
+    Check(Settings.Load(temporary).MoveTilesForFullscreenGames && Settings.Load(temporary).FullscreenGameExecutables is null,
+        "Existing tiling preferences enable fullscreen-game routing without guessing any game applications");
+    var gamePath = Path.Combine(Path.GetTempPath(), "winora-game-test.exe");
+    Settings.Save(tilingPreferences with { MoveTilesForFullscreenGames = false,
+        FullscreenGameExecutables = [gamePath, gamePath.ToUpperInvariant(), "relative.exe", "", Path.ChangeExtension(gamePath, ".txt")] }, temporary);
+    var routedPreferences = Settings.Load(temporary);
+    Check(!routedPreferences.MoveTilesForFullscreenGames && routedPreferences.FullscreenGameExecutables?.Length == 1
+        && string.Equals(routedPreferences.FullscreenGameExecutables[0], gamePath, StringComparison.OrdinalIgnoreCase)
+        && (routedPreferences with { MoveTilesForFullscreenGames = true, FullscreenGameExecutables = null }) == tilingPreferences,
+        "Configured games survive reload with absolute executable paths, case-insensitive deduplication and other preferences intact");
+    Settings.Save(routedPreferences with { FullscreenGameExecutables = [] }, temporary);
+    Check(Settings.Load(temporary).FullscreenGameExecutables is null,
+        "Removing the last configured game returns to automatic exclusive-game detection");
 }
 finally { if (File.Exists(temporary)) File.Delete(temporary); }
 
 await ImmediateChangeChecks.Run(Check);
 await StartupChecks.Run(Check);
 TilingChecks.Run(Check);
+FullscreenRoutingChecks.Run(Check);
 
 // Opt-in integration check changes the taskbar temporarily and restores it in finally.
 if (args.Length == 2 && args[0] == "--engine")

@@ -239,6 +239,23 @@
       <TextBlock x:Name="TilingGapValue" Grid.Column="1" Text="8 px" Foreground="{DynamicResource Muted}" FontSize="12" VerticalAlignment="Center" />
       <Slider x:Name="TilingGapSlider" Grid.Row="1" Grid.ColumnSpan="2" Style="{StaticResource TilingGapControl}" Minimum="0" Maximum="32" Value="8" TickFrequency="1" IsSnapToTickEnabled="True" SmallChange="1" LargeChange="4" ValueChanged="OnTilingGapChanged" Margin="0,8,0,8" AutomationProperties.Name="Window gaps" AutomationProperties.HelpText="Gap between tiled windows, in pixels." />
      </Grid>
+     <CheckBox x:Name="FullscreenRoutingCheckBox" Style="{StaticResource SettingsCheckBox}" Checked="OnFullscreenRoutingChanged" Unchecked="OnFullscreenRoutingChanged" AutomationProperties.Name="Move tiles away from fullscreen games" AutomationProperties.HelpText="Detects exclusive Direct3D fullscreen games automatically. Add games to detect their borderless fullscreen windows. Moves tiles to other available monitors and restores them when fullscreen ends." ToolTip="Moves tiles to other available monitors while a game is fullscreen, then restores them. Add games for borderless fullscreen.">
+      <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE7FC;" FontFamily="Segoe MDL2 Assets" Width="30" VerticalAlignment="Center" Foreground="{DynamicResource Muted}" /><TextBlock Text="Move tiles away from fullscreen games" VerticalAlignment="Center" /></StackPanel>
+     </CheckBox>
+     <Button x:Name="FullscreenGamesButton" Content="Games…" Click="OnManageFullscreenGames" Style="{StaticResource ChromeAction}" HorizontalAlignment="Left" Margin="30,-4,0,8" AutomationProperties.Name="Manage fullscreen games" />
+     <Popup x:Name="FullscreenGamesPopup" Placement="Bottom" PlacementTarget="{Binding ElementName=FullscreenGamesButton}" StaysOpen="False" AllowsTransparency="True" HorizontalOffset="0" VerticalOffset="6" Focusable="False">
+      <Border Width="300" Background="{DynamicResource ButtonSurface}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="14" Padding="16" Margin="10" TextElement.Foreground="{DynamicResource Ink}" TextElement.FontFamily="Segoe UI Variable, Segoe UI" TextElement.FontSize="14">
+       <Border.Effect><DropShadowEffect Color="{DynamicResource ModeShadowColor}" BlurRadius="16" ShadowDepth="3" Opacity="0.14" /></Border.Effect>
+       <StackPanel>
+        <TextBlock Text="Games" FontWeight="SemiBold" Margin="0,0,0,6" />
+        <TextBlock Text="Add games that use borderless fullscreen." Foreground="{DynamicResource Muted}" FontSize="12" TextWrapping="Wrap" />
+        <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False" Margin="0,10,0,0">
+         <StackPanel x:Name="FullscreenGamesList" />
+        </ScrollViewer>
+        <Button Content="Add game…" Click="OnAddFullscreenGame" HorizontalAlignment="Left" Margin="0,10,0,0" AutomationProperties.Name="Add a fullscreen game" />
+       </StackPanel>
+      </Border>
+     </Popup>
      <Grid Margin="0,4,0,0">
       <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
       <StackPanel Orientation="Horizontal">

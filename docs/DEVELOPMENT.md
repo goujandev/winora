@@ -18,8 +18,10 @@ tool, native compiler, GitHub release, or GitHub credentials are needed. The
 execution-policy override applies only to this PowerShell process.
 
 Edit the WPF XAML or C# files, then run the same command again. It closes only
-this workspace's previous dev window, rebuilds the changed files, and reopens
-the app. Production can remain installed and running. The usual build takes
+this workspace's previous dev window, allows up to 30 seconds for graceful
+cleanup, and then waits up to 15 seconds for its headless helpers to exit before
+rebuilding and reopening the app. It never force-stops a helper. Production can
+remain installed and running. The usual build takes
 seconds after dependencies are restored. Changes require rebuilding/reopening;
 this workflow does not add a hot-reload tool.
 
@@ -73,6 +75,19 @@ window stops its tiling engine. An existing independently running window manager
 must be stopped before testing. The upstream engine's diagnostic error log is
 shared at `%UserProfile%\.glzr\glazewm\errors.log`; its existing configuration is
 left alone. Ordinary `dev.cmd` remains the isolated preview.
+
+To test fullscreen-game routing with at least two monitors:
+
+1. In the live tiling test, enable tiling and leave **Move tiles away from
+   fullscreen games** on.
+2. For borderless fullscreen, open **Games… → Add game…** and select the game's
+   actual executable. Exclusive Direct3D fullscreen games are detected
+   automatically.
+3. Enter fullscreen on one monitor, then leave fullscreen. Tiles should move to
+   another available monitor and return when fullscreen ends.
+
+Normal Dev saves this preference and the game list only as previews; it does not
+move application windows. Use `-TestTiling` for the live test.
 
 ## Checks and production releases
 
