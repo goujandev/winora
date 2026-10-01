@@ -36,7 +36,7 @@ package. Those temporary archives are removed after successful installation.
 These worst-case prerequisite downloads are a remaining optimisation target.
 
 Initial measurements on Windows 11 25H2 build 26200 showed about **72–75 MiB working
-set / 58 MiB private memory** for the native engine, and **0.31–0.47% of one CPU core**
+set / 58 MiB private memory** for the native engine, and **0.16–0.47% of one CPU core**
 over a ten-second sample after startup. These are single-machine measurements,
 not guarantees. This prototype demonstrates functionality; its background
 memory usage does **not yet meet an exceptionally small footprint target**.
@@ -93,6 +93,11 @@ git push origin main v0.1.1
 Local update testing can use `WINORA_UPDATE_SOURCE` as a folder or HTTPS feed.
 `WINORA_STARTUP_PROBE` is a test-only process environment variable used to avoid
 opening UI during installer verification. Neither is registered system-wide.
+
+After two releases are published, `./scripts/Test-GitHubUpdates.ps1` verifies an
+actual update through the public GitHub feed on a PC with no existing Winora
+installation. See [validation notes](docs/VALIDATION.md) for results and remaining
+manual checks.
 
 ## Dependencies
 

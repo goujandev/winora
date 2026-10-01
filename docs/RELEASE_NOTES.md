@@ -5,6 +5,7 @@ Winora preview for Windows 11 x64.
 - Optional taskbar effects at sign-in; the settings window can exit fully.
 - Built-in update checks and downloads on app launch, with restart to install.
 - Restores the Windows taskbar when Default is applied.
+- Includes repeatable verification of updates through the public GitHub feed.
 
 The installer bootstraps the .NET 10 Desktop Runtime if it is missing. The native
 taskbar engine is downloaded from its official release on first use; missing
