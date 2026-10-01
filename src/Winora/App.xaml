@@ -4,7 +4,7 @@
  <Application.Resources>
   <SolidColorBrush x:Key="Ink" Color="#F3F3F3" />
   <SolidColorBrush x:Key="Muted" Color="#AEAEAE" />
-  <SolidColorBrush x:Key="Accent" Color="#9BD5EC" />
+  <SolidColorBrush x:Key="Accent" Color="#9BD5EC" /><SolidColorBrush x:Key="CardSurface" Color="#292929" /><SolidColorBrush x:Key="CardStroke" Color="#3D3D3D" /><Style x:Key="SettingsCard" TargetType="Border"><Setter Property="Background" Value="{StaticResource CardSurface}" /><Setter Property="BorderBrush" Value="{StaticResource CardStroke}" /><Setter Property="BorderThickness" Value="1" /><Setter Property="CornerRadius" Value="8" /><Setter Property="Padding" Value="16" /></Style>
   <DrawingImage x:Key="WinoraMark">
    <DrawingImage.Drawing><DrawingGroup>
     <GeometryDrawing Brush="#9BD5EC" Geometry="M 5,2 L 27,2 Q 30,2 30,5 L 30,27 Q 30,30 27,30 L 5,30 Q 2,30 2,27 L 2,5 Q 2,2 5,2 Z" />
@@ -16,14 +16,14 @@
   <Style TargetType="Button">
    <Setter Property="Foreground" Value="{StaticResource Ink}" /><Setter Property="Background" Value="#333333" />
    <Setter Property="BorderBrush" Value="#484848" /><Setter Property="BorderThickness" Value="1" />
-   <Setter Property="Padding" Value="14,8" /><Setter Property="FontSize" Value="12" />
+   <Setter Property="Padding" Value="14,8" /><Setter Property="FontSize" Value="13" />
    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
     <Border x:Name="Surface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
     <ControlTemplate.Triggers>
      <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="Opacity" Value="0.85" /></Trigger>
      <Trigger Property="IsPressed" Value="True"><Setter TargetName="Surface" Property="Opacity" Value="0.65" /></Trigger>
      <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Surface" Property="Opacity" Value="0.4" /></Trigger>
-     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Surface" Property="BorderBrush" Value="{StaticResource Accent}" /></Trigger>
+     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Surface" Property="BorderBrush" Value="White" /></Trigger>
     </ControlTemplate.Triggers>
    </ControlTemplate></Setter.Value></Setter>
   </Style>
@@ -64,13 +64,13 @@
   <Style x:Key="ModeOption" TargetType="RadioButton">
    <Setter Property="Foreground" Value="{StaticResource Ink}" /><Setter Property="FontSize" Value="13" />
    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="RadioButton">
-    <Border x:Name="Surface" Background="#2B2B2B" BorderBrush="#454545" BorderThickness="1" CornerRadius="4" Padding="8,11">
-     <Grid><ContentPresenter HorizontalAlignment="Center" /><Border x:Name="Indicator" Background="{StaticResource Accent}" Height="2" Width="22" CornerRadius="1" VerticalAlignment="Bottom" Margin="0,0,0,-8" Visibility="Collapsed" /></Grid>
+    <Border x:Name="Surface" Background="#2B2B2B" BorderBrush="#454545" BorderThickness="1" CornerRadius="6" Padding="14,16">
+     <Grid><ContentPresenter HorizontalAlignment="Left" /><Border x:Name="Indicator" Background="{StaticResource Accent}" Height="2" Width="32" CornerRadius="1" VerticalAlignment="Bottom" Margin="0,0,0,-12" Visibility="Collapsed" /></Grid>
     </Border>
     <ControlTemplate.Triggers>
      <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="Background" Value="#363636" /></Trigger>
      <Trigger Property="IsChecked" Value="True"><Setter TargetName="Surface" Property="Background" Value="#30414A" /><Setter TargetName="Surface" Property="BorderBrush" Value="#6F9DAC" /><Setter TargetName="Indicator" Property="Visibility" Value="Visible" /></Trigger>
-     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Surface" Property="BorderBrush" Value="{StaticResource Accent}" /></Trigger>
+     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Surface" Property="BorderBrush" Value="White" /></Trigger>
     </ControlTemplate.Triggers>
    </ControlTemplate></Setter.Value></Setter>
   </Style>
@@ -88,6 +88,18 @@
      <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Box" Property="BorderBrush" Value="White" /></Trigger>
      <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5" /></Trigger>
     </ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style TargetType="ScrollBar">
+   <Setter Property="Width" Value="12" />
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ScrollBar">
+    <Grid Background="Transparent" Margin="3,4">
+     <Track x:Name="PART_Track" IsDirectionReversed="True" Orientation="Vertical">
+      <Track.DecreaseRepeatButton><RepeatButton Command="ScrollBar.PageUpCommand" Focusable="False"><RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent" /></ControlTemplate></RepeatButton.Template></RepeatButton></Track.DecreaseRepeatButton>
+      <Track.Thumb><Thumb><Thumb.Template><ControlTemplate TargetType="Thumb"><Border x:Name="ThumbSurface" Background="#646464" CornerRadius="3" /><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ThumbSurface" Property="Background" Value="#999999" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Thumb.Template></Thumb></Track.Thumb>
+      <Track.IncreaseRepeatButton><RepeatButton Command="ScrollBar.PageDownCommand" Focusable="False"><RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent" /></ControlTemplate></RepeatButton.Template></RepeatButton></Track.IncreaseRepeatButton>
+     </Track>
+    </Grid>
    </ControlTemplate></Setter.Value></Setter>
   </Style>
  </Application.Resources>
