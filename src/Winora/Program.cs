@@ -53,6 +53,8 @@ public static class Program
                     else if (mode == TaskbarMode.Acrylic) window.AcrylicMode.IsChecked = true;
                 }
                 // Screenshot scenarios stay behind the no-side-effects preview guard.
+                if (args.Contains("--dark")) window.DarkModeCheckBox.IsChecked = true;
+                if (args.Contains("--settings")) window.SettingsNavigation.IsChecked = true;
                 if (args.Contains("--tray")) window.TrayIconsCheckBox.IsChecked = true;
                 if (args.Contains("--checking"))
                 {

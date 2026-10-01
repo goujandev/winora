@@ -1,0 +1,45 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+ <SolidColorBrush x:Key="Ink" Color="#203C42" />
+ <SolidColorBrush x:Key="Muted" Color="#5A7075" />
+ <SolidColorBrush x:Key="Accent" Color="#087F78" />
+ <SolidColorBrush x:Key="Canvas" Color="#F5F9FA" />
+ <SolidColorBrush x:Key="Line" Color="#DAE6E8" />
+ <LinearGradientBrush x:Key="WindowBackground" StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#EDF6F8" Offset="0" /><GradientStop Color="#F9FAF8" Offset="0.52" /><GradientStop Color="#F0F8F4" Offset="1" /></LinearGradientBrush>
+ <LinearGradientBrush x:Key="SidebarBackground" StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#A6FFFFFF" Offset="0" /><GradientStop Color="#55E2F2EF" Offset="1" /></LinearGradientBrush>
+ <SolidColorBrush x:Key="SidebarStroke" Color="#80C7DEE0" />
+ <SolidColorBrush x:Key="DevBadgeSurface" Color="#F8EDD4" />
+ <SolidColorBrush x:Key="DevBadgeStroke" Color="#E4D2AA" />
+ <SolidColorBrush x:Key="DevBadgeInk" Color="#775B1B" />
+ <SolidColorBrush x:Key="ErrorInk" Color="#A83C34" />
+ <SolidColorBrush x:Key="ButtonSurface" Color="#FFFFFF" />
+ <SolidColorBrush x:Key="ButtonHover" Color="#E8F5F3" />
+ <SolidColorBrush x:Key="ButtonPressed" Color="#D3EBE8" />
+ <SolidColorBrush x:Key="CaptionHover" Color="#DDECEE" />
+ <SolidColorBrush x:Key="CaptionPressed" Color="#CDDFE3" />
+ <SolidColorBrush x:Key="CloseHover" Color="#C42B1C" />
+ <SolidColorBrush x:Key="ClosePressed" Color="#A82418" />
+ <SolidColorBrush x:Key="OnClose" Color="#FFFFFF" />
+ <SolidColorBrush x:Key="NavigationHover" Color="#CFFFFFFF" />
+ <SolidColorBrush x:Key="NavigationSelectedInk" Color="#086B66" />
+ <SolidColorBrush x:Key="NavigationSelectedStroke" Color="#BFDCD7" />
+ <LinearGradientBrush x:Key="NavigationSelectedSurface" StartPoint="0,0" EndPoint="0.2,1"><GradientStop Color="#F5FFFC" Offset="0" /><GradientStop Color="#DCEFEA" Offset="1" /></LinearGradientBrush>
+ <SolidColorBrush x:Key="NavigationPressed" Color="#D3EAE4" />
+ <SolidColorBrush x:Key="FocusStroke" Color="#005B59" />
+ <SolidColorBrush x:Key="SwitchFocusStroke" Color="#004C4A" />
+ <SolidColorBrush x:Key="ModeStroke" Color="#DFEAEC" />
+ <LinearGradientBrush x:Key="ModeSurface" StartPoint="0,0" EndPoint="0.15,1"><GradientStop Color="#FFFFFF" Offset="0" /><GradientStop Color="#DDF7FCFB" Offset="1" /></LinearGradientBrush>
+ <Color x:Key="ModeShadowColor">#48818A</Color>
+ <SolidColorBrush x:Key="ModeHover" Color="#EAF8F6" />
+ <SolidColorBrush x:Key="ModeHoverStroke" Color="#B5D9D6" />
+ <SolidColorBrush x:Key="ModePressed" Color="#D9EEEC" />
+ <SolidColorBrush x:Key="ModeSelected" Color="#E7F6F3" />
+ <SolidColorBrush x:Key="OnAccent" Color="#FFFFFF" />
+ <SolidColorBrush x:Key="ToggleTrack" Color="#B3C6CC" />
+ <SolidColorBrush x:Key="ToggleStroke" Color="#738D95" />
+ <SolidColorBrush x:Key="ToggleKnob" Color="#FFFFFF" />
+ <Color x:Key="ToggleShadowColor">#39545A</Color>
+ <SolidColorBrush x:Key="SettingsRowHover" Color="#80EAF3F3" />
+ <SolidColorBrush x:Key="ScrollThumb" Color="#A1B5BB" />
+ <SolidColorBrush x:Key="ScrollThumbHover" Color="#65858D" />
+</ResourceDictionary>

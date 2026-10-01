@@ -36,6 +36,10 @@ try
     Check(Settings.Load(temporary) == new UserSettings(TaskbarMode.Transparent, true, false), "Existing preferences migrate with tray automation off");
     Settings.Save(Settings.Load(temporary) with { AlwaysShowTrayIcons = true }, temporary);
     Check(Settings.Load(temporary) == new UserSettings(TaskbarMode.Transparent, true, true), "Tray preference persists without changing taskbar finish or startup");
+    File.WriteAllText(temporary, "{\"Mode\":\"Acrylic\",\"StartWithWindows\":true,\"AlwaysShowTrayIcons\":true}");
+    Check(Settings.Load(temporary) == new UserSettings(TaskbarMode.Acrylic, true, true, false), "Existing preferences migrate to the light app theme without changing taskbar settings");
+    Settings.Save(Settings.Load(temporary) with { DarkMode = true }, temporary);
+    Check(Settings.Load(temporary) == new UserSettings(TaskbarMode.Acrylic, true, true, true), "Dark app theme persists independently of taskbar, startup and tray preferences");
 }
 finally { if (File.Exists(temporary)) File.Delete(temporary); }
 

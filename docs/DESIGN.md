@@ -2,7 +2,8 @@
 
 The workspace centers on a live taskbar preview, three finish choices, and two
 setting rows. A compact sidebar currently contains Taskbar and provides space for
-future customization sections. It collapses to an icon rail in narrow windows,
+future customization sections. Settings is anchored at its bottom and currently
+contains a single Dark mode toggle. The sidebar collapses to an icon rail in narrow windows,
 while the Taskbar workspace scrolls independently. The version and updater stay
 in application chrome. There are no decorative subtitles or instructional paragraphs.
 
@@ -12,6 +13,14 @@ the preview. Most content stays on a stable surface. The ribbon W mark is an
 original vector, shared by the app header, SVG and multi-resolution Windows icon.
 Regenerate the icon with `scripts/Build-Icon.ps1` after editing `Assets/Brand.xaml`
 and keep the matching SVG in sync.
+
+Dark mode changes Winora's own palette immediately and persists in its existing
+preferences. It uses charcoal surfaces and mint accents, including navigation,
+window controls, controls, focus states, errors, and update chrome. Theme brushes
+are shared palette resources so current views update without being recreated.
+The desktop preview and Windows settings are independent of app appearance.
+Existing preferences migrate to light mode. Development keeps its theme preference
+in `%LocalAppData%\WinoraDev`, separate from production.
 
 References studied before implementation:
 
@@ -45,6 +54,7 @@ The isolated Development configuration preserves its existing no-Windows-changes
 behavior; use `dev.cmd` to inspect the design before publishing a release.
 
 Offscreen visual checks use `Winora.Dev.exe --render-preview <path> <finish>
-<width> <height>`, with optional `--tray`, `--checking`, or `--error` scenarios.
+<width> <height>`, with optional `--tray`, `--checking`, `--error`, `--dark`, or
+`--settings` scenarios.
 They never save preferences or run Windows effects. Normal, narrow, loading,
 error, and tray-enabled previews were inspected during this redesign.

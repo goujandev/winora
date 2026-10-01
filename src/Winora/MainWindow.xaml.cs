@@ -44,6 +44,8 @@ public partial class MainWindow : Window
         DevBadge.Visibility = AppBuild.IsDevelopment ? Visibility.Visible : Visibility.Collapsed;
         VersionLabel.Text = $"v{Assembly.GetExecutingAssembly().GetName().Version?.ToString(3)}";
         var settings = previewOnly ? new UserSettings(TaskbarMode.Transparent) : Settings.Load();
+        AppTheme.Apply(settings.DarkMode);
+        DarkModeCheckBox.IsChecked = settings.DarkMode;
         changes = new LatestTaskbarChange(new(settings.Mode, settings.StartWithWindows), ApplyTaskbarAsync,
             preference => Settings.Save(Settings.Load() with { Mode = preference.Mode, StartWithWindows = preference.StartWithWindows }));
         changes.Applying += _ =>
@@ -93,20 +95,60 @@ public partial class MainWindow : Window
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
-        var handle = new WindowInteropHelper(this).Handle;
-        var light = 0;
-        _ = DwmSetWindowAttribute(handle, 20, ref light, sizeof(int));
+        UpdateWindowTheme();
     }
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(nint window, int attribute, ref int value, int size);
+    private void UpdateWindowTheme()
+    {
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle == 0) return;
+        var dark = AppTheme.CurrentIsDark ? 1 : 0;
+        _ = DwmSetWindowAttribute(handle, 20, ref dark, sizeof(int));
+    }
+    private void OnSectionChanged(object sender, RoutedEventArgs e)
+    {
+        if (TaskbarPage is null || SettingsPage is null) return;
+        var settings = SettingsNavigation.IsChecked == true;
+        TaskbarPage.Visibility = settings ? Visibility.Collapsed : Visibility.Visible;
+        SettingsPage.Visibility = settings ? Visibility.Visible : Visibility.Collapsed;
+    }
+    private void OnDarkModeChanged(object sender, RoutedEventArgs e)
+    {
+        if (initializing || synchronizing) return;
+        var previous = AppTheme.CurrentIsDark;
+        try
+        {
+            var dark = DarkModeCheckBox.IsChecked == true;
+            AppTheme.Apply(dark);
+            UpdateWindowTheme();
+            if (!previewOnly) Settings.Save(Settings.Load() with { DarkMode = dark });
+            ThemeStatusLabel.Visibility = Visibility.Collapsed;
+        }
+        catch (Exception error)
+        {
+            Trace.WriteLine(error);
+            try { AppTheme.Apply(previous); UpdateWindowTheme(); }
+            catch (Exception restoreError) { Trace.WriteLine(restoreError); }
+            synchronizing = true;
+            try { DarkModeCheckBox.IsChecked = previous; }
+            finally { synchronizing = false; }
+            ThemeStatusLabel.Text = $"Couldn’t save app appearance: {error.Message}";
+            ThemeStatusLabel.Visibility = Visibility.Visible;
+        }
+    }
     private void OnWorkspaceSizeChanged(object sender, SizeChangedEventArgs e)
     {
         var compact = e.NewSize.Width < 820;
         SidebarColumn.Width = new GridLength(compact ? 60 : 164);
         SidebarLabel.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        SettingsSidebarLabel.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
         TaskbarNavigation.HorizontalContentAlignment = compact ? HorizontalAlignment.Center : HorizontalAlignment.Left;
+        SettingsNavigation.HorizontalContentAlignment = TaskbarNavigation.HorizontalContentAlignment;
         TaskbarNavigation.Padding = new Thickness(compact ? 6 : 12, 9, compact ? 6 : 12, 9);
+        SettingsNavigation.Padding = TaskbarNavigation.Padding;
         TaskbarWorkspace.Margin = new Thickness(compact ? 20 : 28, 14, compact ? 20 : 28, 12);
+        SettingsWorkspace.Margin = TaskbarWorkspace.Margin;
     }
     private void OnMinimize(object sender, RoutedEventArgs e) => SystemCommands.MinimizeWindow(this);
     private void OnMaximize(object sender, RoutedEventArgs e)
@@ -255,6 +297,7 @@ public partial class MainWindow : Window
         TrayIconsCheckBox.IsEnabled = CanChangeTrayPreference && !busyTray && !changes.IsBusy && !restartingUpdate;
         UpdateButton.IsEnabled = !AppBuild.IsDevelopment && !busyUpdating && !busyTray && !changes.IsBusy;
         RetryButton.IsEnabled = !busyTray && !changes.IsBusy && !restartingUpdate;
+        DarkModeCheckBox.IsEnabled = !restartingUpdate;
     }
     private void ShowTrayStatus(string text, bool transient = false)
     {

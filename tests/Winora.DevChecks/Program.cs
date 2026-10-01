@@ -2,6 +2,7 @@ using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Win32;
 using Winora;
@@ -21,6 +22,7 @@ internal static class DevChecks
         var before = ReadProductionPreferences();
         var startupBefore = RegistrySnapshot(@"Software\Microsoft\Windows\CurrentVersion\Run");
         var trayPreferenceBefore = RegistrySnapshot(@"Software\Winora\TrayIcons\Preference");
+        var windowsThemeBefore = RegistrySnapshot(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
         using var trayRoot = Registry.CurrentUser.OpenSubKey(@"Control Panel\NotifyIconSettings");
         var trayBefore = trayRoot?.GetSubKeyNames().ToDictionary(name => name, name => { using var key = trayRoot.OpenSubKey(name); return key?.GetValue("IsPromoted"); });
         var preferenceBefore = File.Exists(Settings.FilePath) ? File.ReadAllBytes(Settings.FilePath) : null;
@@ -58,6 +60,7 @@ internal static class DevChecks
             ((RadioButton)window.FindName("AcrylicMode")).IsChecked = true;
             ((CheckBox)window.FindName("StartupCheckBox")).IsChecked = true;
             ((CheckBox)window.FindName("TrayIconsCheckBox")).IsChecked = true;
+            ((CheckBox)window.FindName("DarkModeCheckBox")).IsChecked = true;
             Check(previewPreferences.SequenceEqual(File.ReadAllBytes(Settings.FilePath)), "Offscreen preview interactions never save preferences");
 
             var liveWindow = new MainWindow();
@@ -77,6 +80,37 @@ internal static class DevChecks
                 && ((FrameworkElement)liveWindow.FindName("TrayPreviewOverflow")).Visibility == Visibility.Visible
                 && ((FrameworkElement)liveWindow.FindName("TrayPreviewApps")).Visibility == Visibility.Collapsed,
                 "Tray preference and functional preview update immediately");
+            ((RadioButton)liveWindow.FindName("SettingsNavigation")).IsChecked = true;
+            Check(((FrameworkElement)liveWindow.FindName("SettingsPage")).Visibility == Visibility.Visible
+                && ((FrameworkElement)liveWindow.FindName("TaskbarPage")).Visibility == Visibility.Collapsed,
+                "Settings navigation opens the app settings view separately from Taskbar");
+            var taskbarPreferences = Settings.Load();
+            var lightInk = ((SolidColorBrush)app.FindResource("Ink")).Color;
+            var branding = app.FindResource("WinoraMark");
+            var buttonStyle = app.FindResource(typeof(Button));
+            liveWindow.Dispatcher.BeginInvoke(new Action(() => ((CheckBox)liveWindow.FindName("DarkModeCheckBox")).IsChecked = true));
+            Check(PumpUntil(() => Settings.Load().DarkMode && AppTheme.CurrentIsDark)
+                && ((SolidColorBrush)app.FindResource("Ink")).Color != lightInk
+                && Settings.Load() == (taskbarPreferences with { DarkMode = true }),
+                "Dark mode changes the app palette immediately and saves only the app theme preference");
+            Check(ReferenceEquals(app.FindResource("WinoraMark"), branding)
+                && ReferenceEquals(app.FindResource(typeof(Button)), buttonStyle),
+                "Theme changes preserve the shared branding and control styles");
+            var darkInk = ((SolidColorBrush)app.FindResource("Ink")).Color;
+            Check(((SolidColorBrush)((TextBlock)liveWindow.FindName("AppNameLabel")).Foreground).Color == darkInk
+                && ((SolidColorBrush)((CheckBox)liveWindow.FindName("DarkModeCheckBox")).Foreground).Color == darkInk,
+                "Existing header text and settings control update to the dark palette without reopening");
+            AppTheme.Apply(false);
+            var reopenedWindow = new MainWindow();
+            Check(((CheckBox)reopenedWindow.FindName("DarkModeCheckBox")).IsChecked == true
+                && AppTheme.CurrentIsDark && ((SolidColorBrush)app.FindResource("Ink")).Color == darkInk,
+                "Opening the app restores the saved dark theme and toggle state");
+            Check(windowsThemeBefore == RegistrySnapshot(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"),
+                "Changing the app theme leaves the Windows theme unchanged");
+            ((RadioButton)liveWindow.FindName("TaskbarNavigation")).IsChecked = true;
+            Check(((FrameworkElement)liveWindow.FindName("TaskbarPage")).Visibility == Visibility.Visible
+                && ((FrameworkElement)liveWindow.FindName("SettingsPage")).Visibility == Visibility.Collapsed,
+                "Taskbar navigation returns to the existing controls");
             Check(JsonSerializer.Serialize(before) == JsonSerializer.Serialize(ReadProductionPreferences())
                 && startupBefore == RegistrySnapshot(@"Software\Microsoft\Windows\CurrentVersion\Run")
                 && trayPreferenceBefore == RegistrySnapshot(@"Software\Winora\TrayIcons\Preference"),

@@ -3,7 +3,7 @@
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
  xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
  Title="Winora" Width="1080" Height="720" MinWidth="640" MinHeight="560"
- WindowStartupLocation="CenterScreen" Background="{StaticResource Canvas}" Foreground="{StaticResource Ink}"
+ WindowStartupLocation="CenterScreen" Background="{DynamicResource Canvas}" Foreground="{DynamicResource Ink}"
  FontFamily="Segoe UI Variable, Segoe UI" FontSize="14" UseLayoutRounding="True" TextOptions.TextFormattingMode="Display"
  Icon="Assets/Winora.ico" Loaded="OnLoaded" StateChanged="OnWindowStateChanged">
  <shell:WindowChrome.WindowChrome><shell:WindowChrome CaptionHeight="52" ResizeBorderThickness="6" GlassFrameThickness="0" UseAeroCaptionButtons="False" /></shell:WindowChrome.WindowChrome>
@@ -17,15 +17,14 @@
    </DrawingGroup></DrawingImage.Drawing>
   </DrawingImage>
  </Window.Resources>
- <Grid x:Name="WindowSurface">
-  <Grid.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#EDF6F8" Offset="0" /><GradientStop Color="#F9FAF8" Offset="0.52" /><GradientStop Color="#F0F8F4" Offset="1" /></LinearGradientBrush></Grid.Background>
+ <Grid x:Name="WindowSurface" Background="{DynamicResource WindowBackground}">
   <Grid.RowDefinitions><RowDefinition Height="52" /><RowDefinition /><RowDefinition Height="42" /></Grid.RowDefinitions>
   <Grid>
    <StackPanel Orientation="Horizontal" Margin="22,0,0,0" VerticalAlignment="Center">
     <Image Source="{StaticResource WinoraMark}" Width="28" Height="28" Margin="0,0,10,0" />
     <TextBlock x:Name="AppNameLabel" Text="Winora" FontWeight="SemiBold" VerticalAlignment="Center" />
-    <Border x:Name="DevBadge" Visibility="Collapsed" Background="#F8EDD4" BorderBrush="#E4D2AA" BorderThickness="1" CornerRadius="8" Padding="8,3" Margin="12,0,0,0" ToolTip="Dev preferences only. Windows and the installed app stay unchanged.">
-     <TextBlock Text="PREVIEW ONLY" Foreground="#775B1B" FontSize="10" FontWeight="SemiBold" />
+    <Border x:Name="DevBadge" Visibility="Collapsed" Background="{DynamicResource DevBadgeSurface}" BorderBrush="{DynamicResource DevBadgeStroke}" BorderThickness="1" CornerRadius="8" Padding="8,3" Margin="12,0,0,0" ToolTip="Dev preferences only. Windows and the installed app stay unchanged.">
+     <TextBlock Text="PREVIEW ONLY" Foreground="{DynamicResource DevBadgeInk}" FontSize="10" FontWeight="SemiBold" />
     </Border>
    </StackPanel>
    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" shell:WindowChrome.IsHitTestVisibleInChrome="True">
@@ -36,10 +35,10 @@
   </Grid>
   <Grid x:Name="WorkspaceLayout" Grid.Row="1" SizeChanged="OnWorkspaceSizeChanged">
    <Grid.ColumnDefinitions><ColumnDefinition x:Name="SidebarColumn" Width="164" /><ColumnDefinition /></Grid.ColumnDefinitions>
-   <Border BorderBrush="#80C7DEE0" BorderThickness="0,0,1,0">
-    <Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#A6FFFFFF" Offset="0" /><GradientStop Color="#55E2F2EF" Offset="1" /></LinearGradientBrush></Border.Background>
-    <StackPanel Margin="10,14,10,0">
-     <RadioButton x:Name="TaskbarNavigation" GroupName="Navigation" IsChecked="True" Style="{StaticResource NavigationItem}" AutomationProperties.Name="Taskbar" ToolTip="Taskbar">
+   <Border BorderBrush="{DynamicResource SidebarStroke}" BorderThickness="0,0,1,0" Background="{DynamicResource SidebarBackground}">
+    <Grid Margin="10,14,10,12">
+     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+     <RadioButton x:Name="TaskbarNavigation" GroupName="Navigation" IsChecked="True" Checked="OnSectionChanged" Style="{StaticResource NavigationItem}" AutomationProperties.Name="Taskbar" ToolTip="Taskbar">
       <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="20" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
        <Grid Width="20" Height="20" VerticalAlignment="Center" IsHitTestVisible="False">
         <Path Data="M 3,3.5 H 17 Q 19,3.5 19,5.5 V 14.5 Q 19,16.5 17,16.5 H 3 Q 1,16.5 1,14.5 V 5.5 Q 1,3.5 3,3.5 Z M 1,12 H 19" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="1.4" />
@@ -48,9 +47,15 @@
        <TextBlock x:Name="SidebarLabel" Grid.Column="1" Text="Taskbar" Margin="12,0,0,0" VerticalAlignment="Center" />
       </Grid>
      </RadioButton>
-    </StackPanel>
+     <RadioButton x:Name="SettingsNavigation" Grid.Row="2" GroupName="Navigation" Checked="OnSectionChanged" Style="{StaticResource NavigationItem}" AutomationProperties.Name="Settings" ToolTip="Settings">
+      <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="20" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+       <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="18" Width="20" VerticalAlignment="Center" TextAlignment="Center" />
+       <TextBlock x:Name="SettingsSidebarLabel" Grid.Column="1" Text="Settings" Margin="12,0,0,0" VerticalAlignment="Center" />
+      </Grid>
+     </RadioButton>
+    </Grid>
    </Border>
-  <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0" Focusable="False">
+  <ScrollViewer x:Name="TaskbarPage" Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0" Focusable="False">
    <Grid x:Name="TaskbarWorkspace" Margin="28,14,28,12" MaxWidth="840">
     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
     <TextBlock Text="Taskbar" FontSize="26" FontWeight="SemiBold" Margin="0,0,0,18" AutomationProperties.HeadingLevel="Level1" />
@@ -140,33 +145,45 @@
      <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
      <StackPanel VerticalAlignment="Center">
       <TextBlock x:Name="StatusLabel" FontSize="12" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite">
-       <TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Foreground" Value="{StaticResource Muted}" /><Style.Triggers><Trigger Property="Text" Value=""><Setter Property="Visibility" Value="Collapsed" /></Trigger><Trigger Property="Tag" Value="Error"><Setter Property="Foreground" Value="#A83C34" /></Trigger></Style.Triggers></Style></TextBlock.Style>
+       <TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Foreground" Value="{DynamicResource Muted}" /><Style.Triggers><Trigger Property="Text" Value=""><Setter Property="Visibility" Value="Collapsed" /></Trigger><Trigger Property="Tag" Value="Error"><Setter Property="Foreground" Value="{DynamicResource ErrorInk}" /></Trigger></Style.Triggers></Style></TextBlock.Style>
       </TextBlock>
-      <TextBlock x:Name="ActivityLabel" Foreground="{StaticResource Accent}" FontSize="12" Visibility="Collapsed" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+      <TextBlock x:Name="ActivityLabel" Foreground="{DynamicResource Accent}" FontSize="12" Visibility="Collapsed" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
      </StackPanel>
      <Button x:Name="RetryButton" Grid.Column="1" Content="Retry" Visibility="Collapsed" Style="{StaticResource ChromeAction}" Click="OnRetry" Margin="12,0,0,0" AutomationProperties.Name="Retry taskbar change" />
     </Grid>
     <StackPanel Grid.Row="4">
      <CheckBox x:Name="StartupCheckBox" Style="{StaticResource SettingsCheckBox}" Checked="OnStartupChanged" Unchecked="OnStartupChanged" AutomationProperties.Name="Start taskbar effects with Windows">
-      <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE7E8;" FontFamily="Segoe MDL2 Assets" Width="30" VerticalAlignment="Center" Foreground="{StaticResource Muted}" /><TextBlock Text="Start effects with Windows" VerticalAlignment="Center" /></StackPanel>
+      <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE7E8;" FontFamily="Segoe MDL2 Assets" Width="30" VerticalAlignment="Center" Foreground="{DynamicResource Muted}" /><TextBlock Text="Start effects with Windows" VerticalAlignment="Center" /></StackPanel>
      </CheckBox>
-     <Border Height="1" Background="{StaticResource Line}" Margin="0,2" />
+     <Border Height="1" Background="{DynamicResource Line}" Margin="0,2" />
      <CheckBox x:Name="TrayIconsCheckBox" Style="{StaticResource SettingsCheckBox}" Checked="OnTrayPreferenceChanged" Unchecked="OnTrayPreferenceChanged" AutomationProperties.Name="Always show app tray icons" AutomationProperties.HelpText="Keeps registered app icons visible, including new apps, while Winora is closed. Windows controls system and temporary icons." ToolTip="Includes new apps. Continues while Winora is closed. Windows controls system and temporary icons.">
-      <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE712;" FontFamily="Segoe MDL2 Assets" Width="30" VerticalAlignment="Center" Foreground="{StaticResource Muted}" /><TextBlock Text="Always show app tray icons" VerticalAlignment="Center" /></StackPanel>
+      <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE712;" FontFamily="Segoe MDL2 Assets" Width="30" VerticalAlignment="Center" Foreground="{DynamicResource Muted}" /><TextBlock Text="Always show app tray icons" VerticalAlignment="Center" /></StackPanel>
      </CheckBox>
-     <TextBlock x:Name="TrayStatusLabel" Foreground="{StaticResource Muted}" FontSize="12" TextWrapping="Wrap" Margin="30,2,0,4" Visibility="Collapsed" AutomationProperties.LiveSetting="Polite" />
+     <TextBlock x:Name="TrayStatusLabel" Foreground="{DynamicResource Muted}" FontSize="12" TextWrapping="Wrap" Margin="30,2,0,4" Visibility="Collapsed" AutomationProperties.LiveSetting="Polite" />
     </StackPanel>
    </Grid>
   </ScrollViewer>
+   <ScrollViewer x:Name="SettingsPage" Grid.Column="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+    <StackPanel x:Name="SettingsWorkspace" Margin="28,14,28,12" MaxWidth="840">
+     <TextBlock Text="Settings" FontSize="26" FontWeight="SemiBold" Margin="0,0,0,18" AutomationProperties.HeadingLevel="Level1" />
+     <CheckBox x:Name="DarkModeCheckBox" Style="{StaticResource SettingsCheckBox}" Checked="OnDarkModeChanged" Unchecked="OnDarkModeChanged" AutomationProperties.Name="Dark mode">
+      <StackPanel Orientation="Horizontal">
+       <Path Data="M 14,2 A 8,8 0 1 0 18,14 A 7,7 0 0 1 14,2 Z" Stroke="{DynamicResource Muted}" StrokeThickness="1.4" Width="18" Height="18" Stretch="Uniform" Margin="0,0,12,0" VerticalAlignment="Center" />
+       <TextBlock Text="Dark mode" VerticalAlignment="Center" />
+      </StackPanel>
+     </CheckBox>
+     <TextBlock x:Name="ThemeStatusLabel" Foreground="{DynamicResource ErrorInk}" FontSize="12" TextWrapping="Wrap" Margin="30,6,0,0" Visibility="Collapsed" AutomationProperties.LiveSetting="Polite" />
+    </StackPanel>
+   </ScrollViewer>
   </Grid>
   <Grid Grid.Row="2" Margin="24,0,24,6" VerticalAlignment="Center">
    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-    <TextBlock x:Name="VersionLabel" Foreground="{StaticResource Muted}" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" />
+    <TextBlock x:Name="VersionLabel" Foreground="{DynamicResource Muted}" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" />
     <Button x:Name="UpdateButton" Content="Check for updates" Style="{StaticResource ChromeAction}" Click="OnCheckUpdates" />
-    <TextBlock x:Name="UpdateLabel" Foreground="{StaticResource Muted}" FontSize="12" MaxWidth="180" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed" AutomationProperties.LiveSetting="Polite" />
+    <TextBlock x:Name="UpdateLabel" Foreground="{DynamicResource Muted}" FontSize="12" MaxWidth="180" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed" AutomationProperties.LiveSetting="Polite" />
    </StackPanel>
-   <TextBlock Grid.Column="1" FontSize="11" VerticalAlignment="Center" Margin="12,0,0,0"><Hyperlink NavigateUri="https://github.com/TranslucentTB/TranslucentTB" RequestNavigate="OnNavigate" Foreground="{StaticResource Muted}" TextDecorations="None">TranslucentTB</Hyperlink></TextBlock>
+   <TextBlock Grid.Column="1" FontSize="11" VerticalAlignment="Center" Margin="12,0,0,0"><Hyperlink NavigateUri="https://github.com/TranslucentTB/TranslucentTB" RequestNavigate="OnNavigate" Foreground="{DynamicResource Muted}" TextDecorations="None">TranslucentTB</Hyperlink></TextBlock>
   </Grid>
  </Grid>
 </Window>
