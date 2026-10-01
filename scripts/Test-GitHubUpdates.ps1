@@ -40,7 +40,11 @@ try {
         throw 'The baseline app did not discover and download the newer GitHub release.'
     }
     $update = RunProbe $updatePath $true
-    if (-not $update.HasUpdate) { throw 'No GitHub update was available to apply.' }
+    # Velopack may apply the already downloaded update at the next launch,
+    # before Program.Main runs the probe. Either route must reach ExpectedVersion.
+    if (-not $update.HasUpdate -and $update.Version -ne $ExpectedVersion) {
+        throw 'The staged GitHub update was neither available to apply nor installed at startup.'
+    }
     $installedDll = Join-Path $installation 'current/Winora.dll'
     $deadline = [DateTime]::UtcNow.AddSeconds(45)
     do {

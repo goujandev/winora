@@ -16,7 +16,8 @@ an independent exit route. Default stops the engine and restores Windows.
 **Start taskbar effects with Windows** is optional and off initially.
 
 Winora checks for updates and downloads them when the settings app opens.
-Select **Restart to update** to install a downloaded release. There is no
+Select **Restart to update** to install a downloaded release immediately;
+otherwise the staged update is applied when you next reopen Winora. There is no
 always-running .NET updater or scheduled update task in this prototype. A PC
 that is offline or has the app closed receives an update after it next opens
 Winora online. Updates preserve preferences under `%LocalAppData%\Winora`.

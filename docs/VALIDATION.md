@@ -19,6 +19,10 @@ Development PC: Windows 11 25H2, build 26200.9457, x64.
   future update size depends on what changes.
 - GitHub Actions independently passed configuration checks, the complete
   installed-update test, and release packaging on a hosted Windows runner.
+- Public GitHub feed verification installed the published 0.1.0 installer,
+  discovered and downloaded 0.1.1 without an app-side GitHub token, applied it
+  automatically at the next launch, and confirmed the installed 0.1.1 app was
+  up to date. The temporary test installation was uninstalled afterward.
 - The offscreen WPF layout was rendered and visually reviewed.
 
 Taskbar-bound screenshots were captured during integration checks, but they
