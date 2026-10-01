@@ -1,0 +1,16 @@
+Winora uses Velopack 1.2.0 for installation and updates.
+Velopack: https://github.com/velopack/velopack (MIT licence).
+Its copyright and licence notices accompany its upstream NuGet package.
+
+Taskbar effects use the separate, unmodified TranslucentTB 2026.2 executable.
+It is downloaded directly from the official TranslucentTB release on first use.
+Winora's installer does not redistribute or link TranslucentTB code.
+Project and source: https://github.com/TranslucentTB/TranslucentTB/tree/2026.2
+Licence: https://github.com/TranslucentTB/TranslucentTB/blob/2026.2/LICENSE.md
+TranslucentTB is distributed by its authors under GPLv3.
+The engine retains its upstream name, signature, and independent tray menu.
+
+Missing Microsoft UI and VC framework packages are downloaded directly from
+Microsoft's official NuGet packages or microsoft/winget-cli GitHub releases.
+They are installed as signed per-user Windows framework packages.
+Microsoft's applicable licence terms apply to those packages.

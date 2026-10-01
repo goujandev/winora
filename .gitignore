@@ -1,0 +1,10 @@
+.tools/
+artifacts/
+**/bin/
+**/obj/
+.vs/
+*.user
+dotnet-install.ps1
+.ttb-release.json
+.velopack-versions.json
+.github-tools/
