@@ -46,8 +46,9 @@ public partial class MainWindow : Window
         var settings = previewOnly ? new UserSettings(TaskbarMode.Transparent) : Settings.Load();
         AppTheme.Apply(settings.DarkMode);
         DarkModeCheckBox.IsChecked = settings.DarkMode;
-        changes = new LatestTaskbarChange(new(settings.Mode, settings.StartWithWindows), ApplyTaskbarAsync,
-            preference => Settings.Save(Settings.Load() with { Mode = preference.Mode, StartWithWindows = preference.StartWithWindows }));
+        StartupCheckBox.IsChecked = settings.StartWinoraWithWindows;
+        changes = new LatestTaskbarChange(new(settings.Mode), ApplyTaskbarAsync,
+            preference => Settings.Save(Settings.Load() with { Mode = preference.Mode }));
         changes.Applying += _ =>
         {
             StatusLabel.Tag = null;
@@ -172,10 +173,23 @@ public partial class MainWindow : Window
         {
             StatusLabel.Text = "";
             TrayIconsCheckBox.ToolTip = "Preview only. Windows tray visibility is unchanged.";
+            StartupCheckBox.ToolTip = "Preview only. Windows startup is unchanged.";
             UpdateButton.Content = "Local build";
             RefreshInteractionState();
             return;
         }
+        busyTray = true;
+        RefreshInteractionState();
+        try { await Program.WaitForStartupAsync(); }
+        catch (Exception error)
+        {
+            ShowStartupError($"Couldn’t wait for startup restoration: {error.Message}");
+            return;
+        }
+        finally { busyTray = false; RefreshInteractionState(); }
+        if (!IsLoaded) return;
+        try { StartupService.Synchronize(Settings.Load().StartWinoraWithWindows); }
+        catch (Exception error) { ShowStartupError($"Couldn’t configure Windows startup: {error.Message}"); }
         if (!TrayIconService.IsSupported) ShowTrayStatus("Tray automation is unavailable on this Windows configuration.");
         else if (Settings.Load().AlwaysShowTrayIcons)
         {
@@ -208,24 +222,38 @@ public partial class MainWindow : Window
         var mode = Enum.Parse<TaskbarMode>(tag);
         RenderPreview(mode);
         if (initializing || synchronizing) return;
-        if (previewOnly)
-        {
-            StartupCheckBox.IsEnabled = mode != TaskbarMode.Default;
-            if (mode == TaskbarMode.Default) StartupCheckBox.IsChecked = false;
-            return;
-        }
-        if (mode == TaskbarMode.Default)
-        {
-            synchronizing = true;
-            StartupCheckBox.IsChecked = false;
-            synchronizing = false;
-        }
-        await RequestPreferenceAsync(new(mode, StartupCheckBox.IsChecked == true));
+        if (previewOnly) return;
+        await RequestPreferenceAsync(new(mode));
     }
-    private async void OnStartupChanged(object sender, RoutedEventArgs e)
+    private void OnStartupChanged(object sender, RoutedEventArgs e)
     {
         if (initializing || synchronizing || previewOnly) return;
-        await RequestPreferenceAsync(new(changes.Requested.Mode, StartupCheckBox.IsChecked == true));
+        var previous = Settings.Load().StartWinoraWithWindows;
+        try
+        {
+            var enabled = StartupCheckBox.IsChecked == true;
+            StartupService.Synchronize(enabled);
+            Settings.Save(Settings.Load() with { StartWinoraWithWindows = enabled });
+            StartupStatusLabel.Visibility = Visibility.Collapsed;
+        }
+        catch (Exception error)
+        {
+            Exception? restorationError = null;
+            try { StartupService.Synchronize(previous); }
+            catch (Exception restoreError) { restorationError = restoreError; Trace.WriteLine(restoreError); }
+            synchronizing = true;
+            try { StartupCheckBox.IsChecked = previous; }
+            finally { synchronizing = false; }
+            ShowStartupError(restorationError is null
+                ? $"Couldn’t change Windows startup: {error.Message}"
+                : $"Couldn’t change or restore Windows startup: {error.Message}");
+        }
+    }
+    private void ShowStartupError(string message)
+    {
+        StartupStatusLabel.Text = message;
+        StartupStatusLabel.Visibility = Visibility.Visible;
+        Trace.WriteLine(message);
     }
     private async Task RequestPreferenceAsync(TaskbarPreference preference, bool force = false)
     {
@@ -245,7 +273,7 @@ public partial class MainWindow : Window
     private Task ApplyTaskbarAsync(TaskbarPreference preference)
     {
         var generation = activityGeneration;
-        return taskbar.ApplyAsync(preference.Mode, preference.StartWithWindows,
+        return taskbar.ApplyAsync(preference.Mode,
             new Progress<string>(text =>
             {
                 if (generation == activityGeneration && changes.IsBusy)
@@ -260,7 +288,6 @@ public partial class MainWindow : Window
             DefaultMode.IsChecked = preference.Mode == TaskbarMode.Default;
             TransparentMode.IsChecked = preference.Mode == TaskbarMode.Transparent;
             AcrylicMode.IsChecked = preference.Mode == TaskbarMode.Acrylic;
-            StartupCheckBox.IsChecked = preference.StartWithWindows;
             RenderPreview(preference.Mode);
         }
         finally { synchronizing = false; }
@@ -293,7 +320,7 @@ public partial class MainWindow : Window
     private void RefreshInteractionState()
     {
         DefaultMode.IsEnabled = TransparentMode.IsEnabled = AcrylicMode.IsEnabled = !busyTray && !restartingUpdate;
-        StartupCheckBox.IsEnabled = !busyTray && !restartingUpdate && changes.Requested.Mode != TaskbarMode.Default;
+        StartupCheckBox.IsEnabled = !busyTray && !restartingUpdate;
         TrayIconsCheckBox.IsEnabled = CanChangeTrayPreference && !busyTray && !changes.IsBusy && !restartingUpdate;
         UpdateButton.IsEnabled = !AppBuild.IsDevelopment && !busyUpdating && !busyTray && !changes.IsBusy;
         RetryButton.IsEnabled = !busyTray && !changes.IsBusy && !restartingUpdate;

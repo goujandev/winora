@@ -15,14 +15,18 @@ registry errors instead of silently treating a failed scan as success. It
 blocks on notifications while idle, coalesces change bursts, and has no app list,
 Explorer injection, scheduled PowerShell loop, or dependence on the settings UI.
 
-Enabling installs a per-user `Winora.TrayIcons` sign-in entry and starts the
-helper. This is independent of the translucency startup option and works with
-Default selected. The helper stays active after the settings window closes.
+Enabling starts the helper and works with Default selected. The app-wide
+**Start Winora with Windows** toggle in Settings controls sign-in restoration
+for tray automation and every other enabled feature. It defaults on and uses
+one `Winora` startup entry; legacy per-feature entries are removed when Winora
+opens. The helper stays active after the settings window closes.
 Its executable is copied to a versioned data directory so a settings-app update
 can replace application files safely; opening the updated app migrates the
-helper. Uninstalling stops it and removes its startup entry. Turning the option
+helper. Uninstalling stops it and removes Winora's startup entries. Turning the option
 off stops enforcement; already promoted icons remain visible until changed in
 Windows Settings. Turning it off does not hide icons as a side effect.
+Turning app-wide startup off leaves the current helper running but prevents its
+automatic restoration at the next sign-in.
 
 The preference is off by default and existing settings files migrate with it
 off. App icons must actually be registered and active. It cannot launch apps,

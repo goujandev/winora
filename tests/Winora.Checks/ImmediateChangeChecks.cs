@@ -5,9 +5,9 @@ internal static class ImmediateChangeChecks
 {
     public static async Task Run(Action<bool, string> check)
     {
-        var original = new TaskbarPreference(TaskbarMode.Default, false);
-        var transparent = new TaskbarPreference(TaskbarMode.Transparent, false);
-        var acrylic = new TaskbarPreference(TaskbarMode.Acrylic, true);
+        var original = new TaskbarPreference(TaskbarMode.Default);
+        var transparent = new TaskbarPreference(TaskbarMode.Transparent);
+        var acrylic = new TaskbarPreference(TaskbarMode.Acrylic);
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var applied = new List<TaskbarPreference>();
         var persisted = new List<TaskbarPreference>();
@@ -24,15 +24,15 @@ internal static class ImmediateChangeChecks
         var drain = queue.RequestAsync(transparent);
         _ = queue.RequestAsync(original);
         _ = queue.RequestAsync(acrylic);
-        var latest = acrylic with { StartWithWindows = false };
+        var latest = acrylic;
         _ = queue.RequestAsync(latest);
         check(queue.IsBusy && queue.Requested == latest && queue.Committed == original, "Pending finish is distinct from committed finish");
         gate.SetResult();
         await drain;
         check(maximumConcurrent == 1 && applied.SequenceEqual(new[] { transparent, latest }), "Rapid choices apply serially and discard obsolete pending choices");
-        check(queue.Committed == latest && persisted.Last() == latest && !queue.IsBusy, "Latest finish and startup preference commit together");
+        check(queue.Committed == latest && persisted.Last() == latest && !queue.IsBusy, "Latest finish commits after the OS change");
 
-        var existing = new TaskbarPreference(TaskbarMode.Transparent, true);
+        var existing = new TaskbarPreference(TaskbarMode.Transparent);
         var native = existing;
         TaskbarChangeFailure? failure = null;
         var failureQueue = new LatestTaskbarChange(existing, preference =>
@@ -80,9 +80,12 @@ internal static class ImmediateChangeChecks
         await sameQueue.RequestAsync(existing);
         await sameQueue.RequestAsync(existing, force: true);
         check(count == 1, "Explicit retry and saved-state restoration can reapply an unchanged finish");
-        await sameQueue.RequestAsync(new(TaskbarMode.Default, true));
-        check(!sameQueue.Committed.StartWithWindows && sameQueue.Committed.Mode == TaskbarMode.Default,
-            "Windows default cannot retain an effects startup entry");
+        var preferences = new UserSettings(Mode: TaskbarMode.Acrylic, AlwaysShowTrayIcons: true, StartWinoraWithWindows: true);
+        var defaultQueue = new LatestTaskbarChange(acrylic, _ => Task.CompletedTask,
+            preference => preferences = preferences with { Mode = preference.Mode });
+        await defaultQueue.RequestAsync(original);
+        check(defaultQueue.Committed == original && preferences.StartWinoraWithWindows && preferences.AlwaysShowTrayIcons,
+            "Choosing the Windows taskbar keeps app startup and tray preferences enabled");
 
         failure = null;
         var restoreFailureQueue = new LatestTaskbarChange(existing, _ => throw new IOException("OS operation failed"), _ => { });

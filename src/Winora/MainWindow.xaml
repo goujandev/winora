@@ -152,10 +152,6 @@
      <Button x:Name="RetryButton" Grid.Column="1" Content="Retry" Visibility="Collapsed" Style="{StaticResource ChromeAction}" Click="OnRetry" Margin="12,0,0,0" AutomationProperties.Name="Retry taskbar change" />
     </Grid>
     <StackPanel Grid.Row="4">
-     <CheckBox x:Name="StartupCheckBox" Style="{StaticResource SettingsCheckBox}" Checked="OnStartupChanged" Unchecked="OnStartupChanged" AutomationProperties.Name="Start taskbar effects with Windows">
-      <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE7E8;" FontFamily="Segoe MDL2 Assets" Width="30" VerticalAlignment="Center" Foreground="{DynamicResource Muted}" /><TextBlock Text="Start effects with Windows" VerticalAlignment="Center" /></StackPanel>
-     </CheckBox>
-     <Border Height="1" Background="{DynamicResource Line}" Margin="0,2" />
      <CheckBox x:Name="TrayIconsCheckBox" Style="{StaticResource SettingsCheckBox}" Checked="OnTrayPreferenceChanged" Unchecked="OnTrayPreferenceChanged" AutomationProperties.Name="Always show app tray icons" AutomationProperties.HelpText="Keeps registered app icons visible, including new apps, while Winora is closed. Windows controls system and temporary icons." ToolTip="Includes new apps. Continues while Winora is closed. Windows controls system and temporary icons.">
       <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE712;" FontFamily="Segoe MDL2 Assets" Width="30" VerticalAlignment="Center" Foreground="{DynamicResource Muted}" /><TextBlock Text="Always show app tray icons" VerticalAlignment="Center" /></StackPanel>
      </CheckBox>
@@ -166,6 +162,11 @@
    <ScrollViewer x:Name="SettingsPage" Grid.Column="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
     <StackPanel x:Name="SettingsWorkspace" Margin="28,14,28,12" MaxWidth="840">
      <TextBlock Text="Settings" FontSize="26" FontWeight="SemiBold" Margin="0,0,0,18" AutomationProperties.HeadingLevel="Level1" />
+     <CheckBox x:Name="StartupCheckBox" Style="{StaticResource SettingsCheckBox}" Checked="OnStartupChanged" Unchecked="OnStartupChanged" AutomationProperties.Name="Start Winora with Windows" AutomationProperties.HelpText="Restores enabled features at sign-in without opening this window. Turning it off leaves current features running." ToolTip="Restores enabled features at sign-in without opening this window.">
+      <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE7E8;" FontFamily="Segoe MDL2 Assets" Width="30" VerticalAlignment="Center" Foreground="{DynamicResource Muted}" /><TextBlock Text="Start Winora with Windows" VerticalAlignment="Center" /></StackPanel>
+     </CheckBox>
+     <TextBlock x:Name="StartupStatusLabel" Foreground="{DynamicResource ErrorInk}" FontSize="12" TextWrapping="Wrap" Margin="30,2,0,4" Visibility="Collapsed" AutomationProperties.LiveSetting="Polite" />
+     <Border Height="1" Background="{DynamicResource Line}" Margin="0,2" />
      <CheckBox x:Name="DarkModeCheckBox" Style="{StaticResource SettingsCheckBox}" Checked="OnDarkModeChanged" Unchecked="OnDarkModeChanged" AutomationProperties.Name="Dark mode">
       <StackPanel Orientation="Horizontal">
        <Path Data="M 14,2 A 8,8 0 1 0 18,14 A 7,7 0 0 1 14,2 Z" Stroke="{DynamicResource Muted}" StrokeThickness="1.4" Width="18" Height="18" Stretch="Uniform" Margin="0,0,12,0" VerticalAlignment="Center" />

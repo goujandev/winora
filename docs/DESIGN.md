@@ -1,9 +1,9 @@
 # Interface direction
 
-The workspace centers on a live taskbar preview, three finish choices, and two
+The workspace centers on a live taskbar preview, three finish choices, and one
 setting rows. A compact sidebar currently contains Taskbar and provides space for
 future customization sections. Settings is anchored at its bottom and currently
-contains a single Dark mode toggle. The sidebar collapses to an icon rail in narrow windows,
+contains Dark mode and the global Start Winora with Windows toggle. The sidebar collapses to an icon rail in narrow windows,
 while the Taskbar workspace scrolls independently. The version and updater stay
 in application chrome. There are no decorative subtitles or instructional paragraphs.
 
@@ -41,11 +41,15 @@ These references informed the interaction and material principles; their artwork
 and components were not copied. The interface remains native WPF with no added
 framework, font download, bitmap wallpaper, or component dependency.
 
-Finish and startup changes apply immediately through one serialized queue. The
+Finish changes apply immediately through one serialized queue. The
 preview responds at once; completion confirms the saved state. Newer requests
 replace pending requests, failures roll back to the last committed choice, and
 Retry repeats the failed request. Tray changes retain their existing persistent
-automation and rollback behavior. Update installation waits until mutations finish.
+automation and rollback behavior. The Settings startup toggle is independent of
+the taskbar finish and defaults on, including when upgrading old preferences.
+It writes one per-user Winora sign-in entry and removes legacy per-feature entries.
+Sign-in quietly restores all enabled features, then exits; turning startup off
+does not stop current features. Update installation waits until mutations finish.
 
 Radio buttons retain standard keyboard and screen-reader semantics. Toggles,
 window controls and actions have visible keyboard focus. Status announcements are

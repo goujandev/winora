@@ -1,9 +1,6 @@
 namespace Winora;
 
-public readonly record struct TaskbarPreference(TaskbarMode Mode, bool StartWithWindows)
-{
-    public TaskbarPreference Normalize() => this with { StartWithWindows = Mode != TaskbarMode.Default && StartWithWindows };
-}
+public readonly record struct TaskbarPreference(TaskbarMode Mode);
 
 public sealed record TaskbarChangeFailure(TaskbarPreference Attempted, Exception Error, Exception? RestoreError, bool Superseded);
 
@@ -24,7 +21,7 @@ public sealed class LatestTaskbarChange
 
     public LatestTaskbarChange(TaskbarPreference initial, Func<TaskbarPreference, Task> apply, Action<TaskbarPreference> persist)
     {
-        Committed = Requested = initial.Normalize();
+        Committed = Requested = initial;
         this.apply = apply;
         this.persist = persist;
     }
@@ -32,7 +29,7 @@ public sealed class LatestTaskbarChange
     // Call from one synchronization context (the WPF dispatcher in the app).
     public Task RequestAsync(TaskbarPreference preference, bool force = false)
     {
-        Requested = preference.Normalize();
+        Requested = preference;
         pending = (Requested, force);
         if (IsBusy) return completion!.Task;
         IsBusy = true;

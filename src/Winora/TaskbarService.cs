@@ -4,7 +4,6 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Win32;
 
 namespace Winora;
 
@@ -13,13 +12,11 @@ public sealed class TaskbarService
     public const string EngineVersion = "2026.2";
     public static string EngineDirectory => Path.Combine(Settings.DirectoryPath, "engine", EngineVersion);
     public static string EngineExecutable => Path.Combine(EngineDirectory, "TranslucentTB.exe");
-    private const string StartupName = "Winora.Taskbar";
-    private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
     public bool IsRunning { get { if (AppBuild.IsDevelopment) return false; using var process = FindOwnedProcess(); return process is not null; } }
     public string DescribeStatus() => IsRunning ? "Taskbar effects active" : "Windows default";
 
-    public async Task ApplyAsync(TaskbarMode mode, bool startWithWindows = false, IProgress<string>? progress = null)
+    public async Task ApplyAsync(TaskbarMode mode, IProgress<string>? progress = null)
     {
         if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
         if (AppBuild.IsDevelopment)
@@ -29,7 +26,7 @@ public sealed class TaskbarService
             return;
         }
         ThrowIfForeignEngineRunning();
-        if (mode == TaskbarMode.Default) { await StopAsync(); SetStartup(false); return; }
+        if (mode == TaskbarMode.Default) { await StopAsync(); return; }
         progress?.Report("Preparing the taskbar engine…");
         await EngineProvisioner.EnsureAsync(progress);
         using (var existing = FindOwnedProcess())
@@ -56,7 +53,6 @@ public sealed class TaskbarService
                 if (process.HasExited) throw new InvalidOperationException($"The taskbar engine exited (code {process.ExitCode}). Check its log in {EngineDirectory}.");
             }
             else await Task.Delay(700);
-            SetStartup(startWithWindows);
         }
         catch
         {
@@ -83,13 +79,6 @@ public sealed class TaskbarService
     }
 
     public Task PrepareForUpdateAsync() => StopAsync();
-    public static void SetStartup(bool enabled)
-    {
-        if (AppBuild.IsDevelopment) return;
-        using var key = Registry.CurrentUser.CreateSubKey(RunKey);
-        if (enabled) key.SetValue(StartupName, $"\"{EngineExecutable}\"");
-        else key.DeleteValue(StartupName, throwOnMissingValue: false);
-    }
 
     public static async Task StopAsync()
     {

@@ -10,6 +10,8 @@ namespace Winora;
 
 public static class Program
 {
+    private const string StartupMutex = @"Local\Winora.Startup";
+
     [STAThread]
     public static int Main(string[] args)
     {
@@ -17,7 +19,7 @@ public static class Program
         if (!AppBuild.IsDevelopment) VelopackApp.Build().OnBeforeUninstallFastCallback(_ =>
         {
             if (Velopack.Locators.VelopackLocator.Current.AppId != "Winora") return;
-            TaskbarService.SetStartup(false);
+            StartupService.Remove();
             TaskbarService.StopAsync().GetAwaiter().GetResult();
             TrayIconService.DisableAsync().GetAwaiter().GetResult();
         }).Run();
@@ -27,6 +29,7 @@ public static class Program
         {
             if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
                 throw new PlatformNotSupportedException("Winora requires Windows 11.");
+            if (args.Contains("--startup")) return RestoreFeaturesAtSignIn();
             if (args.Length >= 2 && args[0] == "--update-probe")
             {
                 var updates = new UpdateService();
@@ -79,22 +82,68 @@ public static class Program
                 encoder.Save(stream);
                 return 0;
             }
-            using var singleInstance = new Mutex(true, AppBuild.InstanceMutex, out var firstInstance);
-            if (!firstInstance) return 0;
-            return app.Run(new MainWindow());
+            using var singleInstance = new Mutex(false, AppBuild.InstanceMutex);
+            if (!TryAcquire(singleInstance)) return 0;
+            try { return app.Run(new MainWindow()); }
+            finally { singleInstance.ReleaseMutex(); }
         }
         catch (Exception error)
         {
-            try
-            {
-                Directory.CreateDirectory(Settings.DirectoryPath);
-                File.AppendAllText(Path.Combine(Settings.DirectoryPath, "errors.log"),
-                    $"{DateTimeOffset.Now:O} {error}\n");
-            }
-            catch (Exception loggingError) when (loggingError is IOException or UnauthorizedAccessException) { }
-            if (!args.Contains("--render-preview") && !args.Contains("--update-probe"))
+            LogError(error);
+            if (!args.Contains("--render-preview") && !args.Contains("--update-probe") && !args.Contains("--startup"))
                 MessageBox.Show(error.Message, AppBuild.Name, MessageBoxButton.OK, MessageBoxImage.Error);
             return 1;
         }
+    }
+
+    private static int RestoreFeaturesAtSignIn()
+    {
+        if (AppBuild.IsDevelopment) return 0;
+        using var restoring = new Mutex(false, StartupMutex);
+        if (!TryAcquire(restoring)) return 0;
+        try
+        {
+            // A manually opened window restores its own features. If it opens during
+            // this pass, its async load waits for this separate mutex without hiding UI.
+            using var settingsWindow = new Mutex(false, AppBuild.InstanceMutex);
+            if (!TryAcquire(settingsWindow)) return 0;
+            settingsWindow.ReleaseMutex();
+            var failures = FeatureStartup.RestoreAsync(Settings.Load()).GetAwaiter().GetResult();
+            foreach (var error in failures) LogError(error);
+            return failures.Count == 0 ? 0 : 1;
+        }
+        finally { restoring.ReleaseMutex(); }
+    }
+
+    internal static Task WaitForStartupAsync()
+    {
+        if (AppBuild.IsDevelopment) return Task.CompletedTask;
+        return Task.Run(() =>
+        {
+            if (!Mutex.TryOpenExisting(StartupMutex, out var restoring)) return;
+            using (restoring)
+            {
+                try { restoring.WaitOne(); }
+                catch (AbandonedMutexException) { }
+                restoring.ReleaseMutex();
+            }
+        });
+    }
+
+    private static bool TryAcquire(Mutex mutex)
+    {
+        try { return mutex.WaitOne(0); }
+        catch (AbandonedMutexException) { return true; }
+    }
+
+    private static void LogError(Exception error)
+    {
+        try
+        {
+            Directory.CreateDirectory(Settings.DirectoryPath);
+            File.AppendAllText(Path.Combine(Settings.DirectoryPath, "errors.log"),
+                $"{DateTimeOffset.Now:O} {error}\n");
+        }
+        catch (Exception loggingError) when (loggingError is IOException or UnauthorizedAccessException) { }
     }
 }

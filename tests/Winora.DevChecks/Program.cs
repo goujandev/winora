@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
@@ -30,14 +31,44 @@ internal static class DevChecks
         var configBefore = File.Exists(configPath) ? File.ReadAllBytes(configPath) : null;
         try
         {
-            foreach (var mode in Enum.GetValues<TaskbarMode>()) new TaskbarService().ApplyAsync(mode, true).GetAwaiter().GetResult();
-            TaskbarService.SetStartup(true);
-            TaskbarService.SetStartup(false);
+            foreach (var mode in Enum.GetValues<TaskbarMode>()) new TaskbarService().ApplyAsync(mode).GetAwaiter().GetResult();
+            StartupService.Synchronize(true);
+            StartupService.Synchronize(false);
+            StartupService.Remove();
+            var startupCalls = 0;
+            var startupFailures = FeatureStartup.RestoreAsync(new UserSettings(Mode: TaskbarMode.Acrylic, AlwaysShowTrayIcons: true),
+                _ => { startupCalls++; return Task.CompletedTask; }, () => { startupCalls++; return Task.CompletedTask; }).GetAwaiter().GetResult();
+            Check(startupCalls == 0 && startupFailures.Count == 0, "Dev startup never restores production feature engines");
             TaskbarService.StopAsync().GetAwaiter().GetResult();
             new TrayIconService().EnableAsync().GetAwaiter().GetResult();
             TrayIconService.DisableAsync().GetAwaiter().GetResult();
-            Settings.Save(new UserSettings(TaskbarMode.Acrylic, true, true));
-            Check(Settings.Load() == new UserSettings(TaskbarMode.Acrylic, true, true), "Dev preferences persist independently");
+            var devPreferences = new UserSettings(Mode: TaskbarMode.Acrylic, AlwaysShowTrayIcons: true, StartWinoraWithWindows: false);
+            Settings.Save(devPreferences);
+            Check(Settings.Load() == devPreferences, "Dev preferences persist independently");
+            var startupPreferences = File.ReadAllBytes(Settings.FilePath);
+            var startupConfig = File.ReadAllBytes(configPath);
+            var errorPath = Path.Combine(Settings.DirectoryPath, "errors.log");
+            var startupErrors = File.Exists(errorPath) ? File.ReadAllBytes(errorPath) : null;
+            var startupInfo = new ProcessStartInfo(Path.Combine(Path.GetDirectoryName(typeof(AppBuild).Assembly.Location)!, "Winora.Dev.exe"))
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            startupInfo.ArgumentList.Add("--startup");
+            using (var startupProcess = Process.Start(startupInfo) ?? throw new InvalidOperationException("Could not launch Dev startup check."))
+            {
+                var exited = startupProcess.WaitForExit(5000);
+                if (!exited) { startupProcess.Kill(entireProcessTree: true); startupProcess.WaitForExit(); }
+                Check(exited && startupProcess.ExitCode == 0
+                    && startupProcess.StandardOutput.ReadToEnd().Length == 0 && startupProcess.StandardError.ReadToEnd().Length == 0
+                    && startupPreferences.SequenceEqual(File.ReadAllBytes(Settings.FilePath))
+                    && startupConfig.SequenceEqual(File.ReadAllBytes(configPath))
+                    && JsonSerializer.Serialize(startupErrors) == JsonSerializer.Serialize(File.Exists(errorPath) ? File.ReadAllBytes(errorPath) : null),
+                    "The Dev startup entrypoint exits quietly without changing preferences, engine data or error logs");
+            }
             Check(!new TaskbarService().IsRunning, "Dev never claims a production taskbar engine");
             var previousSource = Environment.GetEnvironmentVariable("WINORA_UPDATE_SOURCE");
             try
@@ -59,6 +90,7 @@ internal static class DevChecks
             ((RadioButton)window.FindName("DefaultMode")).IsChecked = true;
             ((RadioButton)window.FindName("AcrylicMode")).IsChecked = true;
             ((CheckBox)window.FindName("StartupCheckBox")).IsChecked = true;
+            ((CheckBox)window.FindName("StartupCheckBox")).IsChecked = false;
             ((CheckBox)window.FindName("TrayIconsCheckBox")).IsChecked = true;
             ((CheckBox)window.FindName("DarkModeCheckBox")).IsChecked = true;
             Check(previewPreferences.SequenceEqual(File.ReadAllBytes(Settings.FilePath)), "Offscreen preview interactions never save preferences");
@@ -70,11 +102,12 @@ internal static class DevChecks
                 ((RadioButton)liveWindow.FindName("TransparentMode")).IsChecked = true;
                 ((RadioButton)liveWindow.FindName("AcrylicMode")).IsChecked = true;
             }));
-            var immediateSaved = PumpUntil(() => Settings.Load().Mode == TaskbarMode.Acrylic && !Settings.Load().StartWithWindows
+            var immediateSaved = PumpUntil(() => Settings.Load().Mode == TaskbarMode.Acrylic && !Settings.Load().StartWinoraWithWindows
                 && ((TextBlock)liveWindow.FindName("StatusLabel")).Text == "Preview saved");
             Check(immediateSaved, "Clicking a finish immediately saves the latest dev preference without Apply");
             liveWindow.Dispatcher.BeginInvoke(new Action(() => ((CheckBox)liveWindow.FindName("StartupCheckBox")).IsChecked = true));
-            Check(PumpUntil(() => Settings.Load().StartWithWindows), "Startup changes save immediately without changing the finish");
+            Check(PumpUntil(() => Settings.Load().StartWinoraWithWindows) && Settings.Load().Mode == TaskbarMode.Acrylic,
+                "App startup changes save immediately without changing the finish");
             liveWindow.Dispatcher.BeginInvoke(new Action(() => ((CheckBox)liveWindow.FindName("TrayIconsCheckBox")).IsChecked = false));
             Check(PumpUntil(() => !Settings.Load().AlwaysShowTrayIcons)
                 && ((FrameworkElement)liveWindow.FindName("TrayPreviewOverflow")).Visibility == Visibility.Visible
@@ -84,6 +117,17 @@ internal static class DevChecks
             Check(((FrameworkElement)liveWindow.FindName("SettingsPage")).Visibility == Visibility.Visible
                 && ((FrameworkElement)liveWindow.FindName("TaskbarPage")).Visibility == Visibility.Collapsed,
                 "Settings navigation opens the app settings view separately from Taskbar");
+            var startupToggle = (CheckBox)liveWindow.FindName("StartupCheckBox");
+            Check(IsWithin(startupToggle, (DependencyObject)liveWindow.FindName("SettingsPage"))
+                && !IsWithin(startupToggle, (DependencyObject)liveWindow.FindName("TaskbarPage")),
+                "The single startup toggle belongs to app Settings rather than Taskbar");
+            liveWindow.Dispatcher.BeginInvoke(new Action(() => ((RadioButton)liveWindow.FindName("DefaultMode")).IsChecked = true));
+            Check(PumpUntil(() => Settings.Load().Mode == TaskbarMode.Default) && startupToggle.IsEnabled
+                && startupToggle.IsChecked == true && Settings.Load().StartWinoraWithWindows,
+                "App startup remains enabled and available with the Windows taskbar selected");
+            liveWindow.Dispatcher.BeginInvoke(new Action(() => startupToggle.IsChecked = false));
+            Check(PumpUntil(() => !Settings.Load().StartWinoraWithWindows) && Settings.Load().Mode == TaskbarMode.Default,
+                "App startup can be disabled independently of every feature");
             var taskbarPreferences = Settings.Load();
             var lightInk = ((SolidColorBrush)app.FindResource("Ink")).Color;
             var branding = app.FindResource("WinoraMark");
@@ -127,6 +171,12 @@ internal static class DevChecks
     {
         using var key = Registry.CurrentUser.OpenSubKey(path);
         return JsonSerializer.Serialize(key?.GetValueNames().Order().ToDictionary(name => name, name => key.GetValue(name)));
+    }
+    private static bool IsWithin(DependencyObject child, DependencyObject ancestor)
+    {
+        for (DependencyObject? item = child; item is not null; item = LogicalTreeHelper.GetParent(item))
+            if (ReferenceEquals(item, ancestor)) return true;
+        return false;
     }
     private static void Restore(string path, byte[]? content)
     {

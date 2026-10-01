@@ -11,8 +11,6 @@ public sealed class TrayIconService
     public const string TrayKey = @"Control Panel\NotifyIconSettings";
     private const string PreferenceKey = @"Software\Winora\TrayIcons\Preference";
     private const string StateKey = @"Software\Winora\TrayIcons\State";
-    private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private const string StartupName = "Winora.TrayIcons";
     private static string AgentRoot => Path.Combine(Settings.DirectoryPath, "tray-agent");
     private static string AgentPath => Path.Combine(AgentRoot,
         typeof(TrayIconService).Assembly.GetName().Version!.ToString(3), "Winora.TrayAgent.exe");
@@ -62,8 +60,6 @@ public sealed class TrayIconService
         }
         using (var state = Registry.CurrentUser.CreateSubKey(StateKey)) state.SetValue("ProcessId", 0, RegistryValueKind.DWord);
         using (var preference = Registry.CurrentUser.CreateSubKey(PreferenceKey)) preference.SetValue("Enabled", 1, RegistryValueKind.DWord);
-        // A dedicated sign-in entry persists independently of taskbar translucency.
-        using (var startup = Registry.CurrentUser.CreateSubKey(RunKey)) startup.SetValue(StartupName, $"\"{AgentPath}\"");
         using var existing = FindAgent();
         if (existing is null)
         {
@@ -90,7 +86,6 @@ public sealed class TrayIconService
     {
         if (AppBuild.IsDevelopment) return;
         using (var preference = Registry.CurrentUser.CreateSubKey(PreferenceKey)) preference.SetValue("Enabled", 0, RegistryValueKind.DWord);
-        using (var startup = Registry.CurrentUser.OpenSubKey(RunKey, true)) startup?.DeleteValue(StartupName, false);
         using var process = FindAgent();
         if (process is null) return;
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));

@@ -17,6 +17,7 @@ internal static class TrayLiveCheck
             using var key = root.OpenSubKey(name)!;
             return key.GetValue("IsPromoted");
         });
+        var startupBefore = StartupEntries();
         var guid = Guid.NewGuid();
         var window = CreateWindowExW(0, "STATIC", "Winora tray verification", 0, 0, 0, 0, 0, new nint(-3), 0, 0, 0);
         if (window == 0) throw new InvalidOperationException("Could not create a test notification window.");
@@ -54,10 +55,9 @@ internal static class TrayLiveCheck
             Console.WriteLine("PASS Promoted test icon is located directly inside the taskbar");
             using (var entry = root.OpenSubKey(ownEntry, true)!) entry.SetValue("IsPromoted", 0, RegistryValueKind.DWord);
             ExpectPromoted(root, ownEntry, "Actual Windows visibility reset restored");
-            using var run = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run");
-            if (run?.GetValue("Winora.TrayIcons") is not string startup || !startup.Contains("Winora.TrayAgent.exe"))
-                throw new InvalidOperationException("Persistent sign-in startup was not installed.");
-            Console.WriteLine("PASS Native helper activation and sign-in persistence");
+            if (startupBefore != StartupEntries())
+                throw new InvalidOperationException("Enabling tray automation changed the app-wide startup preference.");
+            Console.WriteLine("PASS Native helper activation leaves app startup registration unchanged");
         }
         finally
         {
@@ -73,7 +73,16 @@ internal static class TrayLiveCheck
             }
             if (ownEntry is not null) root.DeleteSubKeyTree(ownEntry, false);
             Console.WriteLine("Restored original tray visibility and removed test icon.");
+            if (startupBefore != StartupEntries())
+                throw new InvalidOperationException("Disabling tray automation changed the app-wide startup preference.");
+            Console.WriteLine("PASS Stopping tray automation leaves app startup registration unchanged");
         }
+    }
+    private static string StartupEntries()
+    {
+        using var key = Registry.CurrentUser.OpenSubKey(StartupService.RunKey);
+        return System.Text.Json.JsonSerializer.Serialize(new[] { StartupService.StartupName, "Winora.Taskbar", "Winora.TrayIcons" }
+            .ToDictionary(name => name, name => key?.GetValue(name)));
     }
     private static bool ProcessRunning() => System.Diagnostics.Process.GetProcessesByName("Winora.TrayAgent").Length != 0;
     private static void ExpectPromoted(RegistryKey root, string name, string message)

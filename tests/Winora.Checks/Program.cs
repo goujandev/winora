@@ -25,25 +25,33 @@ catch (ArgumentOutOfRangeException) { Check(true, "Invalid native mode is reject
 var temporary = Path.Combine(Path.GetTempPath(), $"winora-checks-{Guid.NewGuid():N}.json");
 try
 {
-    Check(Settings.Load(temporary) == new UserSettings(), "Missing preferences use Windows defaults");
+    Check(Settings.Load(temporary) == new UserSettings() && Settings.Load(temporary).StartWinoraWithWindows,
+        "Missing preferences enable app startup by default");
     File.WriteAllText(temporary, "{broken");
     Check(Settings.Load(temporary) == new UserSettings(), "Corrupt preferences use Windows defaults");
     File.WriteAllText(temporary, "{\"Mode\":\"FutureMode\"}");
     Check(Settings.Load(temporary) == new UserSettings(), "Unknown persisted mode is handled safely");
-    Settings.Save(new UserSettings(TaskbarMode.Acrylic, true), temporary);
-    Check(Settings.Load(temporary) == new UserSettings(TaskbarMode.Acrylic, true), "Appearance and startup preference survive reload");
+    var explicitPreferences = new UserSettings(Mode: TaskbarMode.Acrylic, AlwaysShowTrayIcons: true, DarkMode: true, StartWinoraWithWindows: false);
+    Settings.Save(explicitPreferences, temporary);
+    Check(Settings.Load(temporary) == explicitPreferences, "Explicit app startup opt-out and enabled features survive reload");
     File.WriteAllText(temporary, "{\"Mode\":\"Transparent\",\"StartWithWindows\":true}");
-    Check(Settings.Load(temporary) == new UserSettings(TaskbarMode.Transparent, true, false), "Existing preferences migrate with tray automation off");
+    Check(Settings.Load(temporary) == new UserSettings(Mode: TaskbarMode.Transparent), "Legacy taskbar startup preferences migrate to default-on app startup");
+    File.WriteAllText(temporary, "{\"Mode\":\"Transparent\",\"StartWithWindows\":false}");
+    Check(Settings.Load(temporary) == new UserSettings(Mode: TaskbarMode.Transparent), "Legacy taskbar-only opt-out does not disable the new app preference");
     Settings.Save(Settings.Load(temporary) with { AlwaysShowTrayIcons = true }, temporary);
-    Check(Settings.Load(temporary) == new UserSettings(TaskbarMode.Transparent, true, true), "Tray preference persists without changing taskbar finish or startup");
+    Check(Settings.Load(temporary) == new UserSettings(Mode: TaskbarMode.Transparent, AlwaysShowTrayIcons: true), "Tray preference persists without changing taskbar finish or app startup");
     File.WriteAllText(temporary, "{\"Mode\":\"Acrylic\",\"StartWithWindows\":true,\"AlwaysShowTrayIcons\":true}");
-    Check(Settings.Load(temporary) == new UserSettings(TaskbarMode.Acrylic, true, true, false), "Existing preferences migrate to the light app theme without changing taskbar settings");
+    Check(Settings.Load(temporary) == new UserSettings(Mode: TaskbarMode.Acrylic, AlwaysShowTrayIcons: true), "Existing preferences preserve the finish and tray automation while enabling app startup");
     Settings.Save(Settings.Load(temporary) with { DarkMode = true }, temporary);
-    Check(Settings.Load(temporary) == new UserSettings(TaskbarMode.Acrylic, true, true, true), "Dark app theme persists independently of taskbar, startup and tray preferences");
+    Check(Settings.Load(temporary) == new UserSettings(Mode: TaskbarMode.Acrylic, AlwaysShowTrayIcons: true, DarkMode: true), "Dark app theme persists independently of taskbar, startup and tray preferences");
+    File.WriteAllText(temporary, "{\"Mode\":\"Acrylic\",\"StartWithWindows\":true,\"StartWinoraWithWindows\":false,\"AlwaysShowTrayIcons\":true}");
+    Check(!Settings.Load(temporary).StartWinoraWithWindows && Settings.Load(temporary).AlwaysShowTrayIcons,
+        "A saved app startup opt-out takes precedence over legacy taskbar startup");
 }
 finally { if (File.Exists(temporary)) File.Delete(temporary); }
 
 await ImmediateChangeChecks.Run(Check);
+await StartupChecks.Run(Check);
 
 // Opt-in integration check changes the taskbar temporarily and restores it in finally.
 if (args.Length == 2 && args[0] == "--engine")

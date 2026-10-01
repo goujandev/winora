@@ -13,14 +13,16 @@ Select Default, Transparent, or Acrylic to change the finish immediately.
 The settings window exits completely when closed. The separate native engine
 maintains the taskbar effect and keeps its original TranslucentTB tray menu as
 an independent exit route. Default stops the engine and restores Windows.
-**Start taskbar effects with Windows** is optional and off initially.
-
-**Settings**, at the bottom of the sidebar, contains **Dark mode**. It changes
-Winora's interface immediately and remembers the choice without changing Windows.
+**Settings**, at the bottom of the sidebar, contains **Start Winora with Windows**
+and **Dark mode**. Startup is on by default and restores every enabled feature
+at sign-in without opening the settings window. One startup entry controls all
+features; turning it off leaves the current session's effects running. Dark mode
+changes Winora's interface immediately without changing Windows.
 
 **Always show app tray icons** is a separate optional preference. A small native
 helper keeps existing and newly registered app icons visible, restores reset
-visibility, and runs at sign-in even with the settings window closed. Disabling
+visibility, and resumes at sign-in when **Start Winora with Windows** is enabled.
+It stays active with the settings window closed. Disabling
 it stops enforcement and leaves current icon visibility for Windows to manage.
 The control reports unavailable Windows configurations and failures. See
 [tray behavior, limitations, and validation](docs/TRAY_ICONS.md).
@@ -29,7 +31,8 @@ Winora checks for updates and downloads them when the settings app opens.
 The version and **Check for updates** action are in the application footer.
 Select **Restart to update** there to install a downloaded release immediately;
 otherwise the staged update is applied when you next reopen Winora. There is no
-always-running .NET updater or scheduled update task in this prototype. A PC
+always-running .NET updater or scheduled update task in this prototype. Startup
+restoration exits after launching the selected native features. A PC
 that is offline or has the app closed receives an update after it next opens
 Winora online. Updates preserve preferences under `%LocalAppData%\Winora`.
 

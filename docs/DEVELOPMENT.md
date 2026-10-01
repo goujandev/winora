@@ -40,8 +40,10 @@ production binaries remain under their existing Debug/Release directories.
   **PREVIEW ONLY** badge stays visible.
 - Dev preferences, preview configuration, and error logs use
   `%LocalAppData%\WinoraDev`, separate from `%LocalAppData%\Winora`.
-- App settings such as Dark mode change the dev interface immediately and persist
-  only in its own preferences. The production app's appearance stays independent.
+- App settings such as Dark mode and Start Winora with Windows persist only in
+  dev preferences. The single startup toggle is in Settings and defaults on;
+  in Dev it previews the preference without registering Windows startup.
+  The production app's settings stay independent.
 - Dev uses its own single-instance mutex and bypasses all Velopack hooks and
   release feeds, including environment-based update-source overrides.
 - Taskbar finishes, the startup checkbox, and tray automation can be exercised
