@@ -99,6 +99,15 @@ public partial class MainWindow : Window
     }
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(nint window, int attribute, ref int value, int size);
+    private void OnWorkspaceSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        var compact = e.NewSize.Width < 820;
+        SidebarColumn.Width = new GridLength(compact ? 60 : 164);
+        SidebarLabel.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        TaskbarNavigation.HorizontalContentAlignment = compact ? HorizontalAlignment.Center : HorizontalAlignment.Left;
+        TaskbarNavigation.Padding = new Thickness(compact ? 6 : 12, 9, compact ? 6 : 12, 9);
+        TaskbarWorkspace.Margin = new Thickness(compact ? 20 : 28, 14, compact ? 20 : 28, 12);
+    }
     private void OnMinimize(object sender, RoutedEventArgs e) => SystemCommands.MinimizeWindow(this);
     private void OnMaximize(object sender, RoutedEventArgs e)
     {

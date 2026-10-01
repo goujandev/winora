@@ -51,6 +51,23 @@
     <Setter Property="Foreground" Value="{StaticResource Accent}" /><Setter Property="FontSize" Value="12" />
     <Setter Property="Padding" Value="9,4" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderBrush" Value="Transparent" />
    </Style>
+   <Style x:Key="NavigationItem" TargetType="RadioButton">
+    <Setter Property="Foreground" Value="{StaticResource Muted}" /><Setter Property="FontSize" Value="14" /><Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Height" Value="44" /><Setter Property="Padding" Value="12,9" /><Setter Property="HorizontalContentAlignment" Value="Left" /><Setter Property="Cursor" Value="Hand" />
+    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="RadioButton">
+     <Border x:Name="Surface" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" CornerRadius="12" Padding="{TemplateBinding Padding}">
+      <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" />
+     </Border>
+     <ControlTemplate.Triggers>
+      <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="Background" Value="#CFFFFFFF" /></Trigger>
+      <Trigger Property="IsChecked" Value="True"><Setter Property="Foreground" Value="#086B66" /><Setter TargetName="Surface" Property="BorderBrush" Value="#BFDCD7" />
+       <Setter TargetName="Surface" Property="Background"><Setter.Value><LinearGradientBrush StartPoint="0,0" EndPoint="0.2,1"><GradientStop Color="#F5FFFC" Offset="0" /><GradientStop Color="#DCEFEA" Offset="1" /></LinearGradientBrush></Setter.Value></Setter>
+      </Trigger>
+      <Trigger Property="IsPressed" Value="True"><Setter TargetName="Surface" Property="Background" Value="#D3EAE4" /></Trigger>
+      <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Surface" Property="BorderBrush" Value="#005B59" /><Setter TargetName="Surface" Property="BorderThickness" Value="2" /></Trigger>
+     </ControlTemplate.Triggers>
+    </ControlTemplate></Setter.Value></Setter>
+   </Style>
    <Style x:Key="ModeOption" TargetType="RadioButton">
     <Setter Property="Foreground" Value="{StaticResource Ink}" /><Setter Property="FontSize" Value="14" /><Setter Property="Cursor" Value="Hand" />
     <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="RadioButton">

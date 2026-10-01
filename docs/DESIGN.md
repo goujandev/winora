@@ -1,9 +1,10 @@
 # Interface direction
 
 The workspace centers on a live taskbar preview, three finish choices, and two
-setting rows. Winora currently has one customization section, so a permanent
-navigation rail adds no useful navigation. The version and updater stay in
-application chrome. There are no decorative subtitles or instructional paragraphs.
+setting rows. A compact sidebar currently contains Taskbar and provides space for
+future customization sections. It collapses to an icon rail in narrow windows,
+while the Taskbar workspace scrolls independently. The version and updater stay
+in application chrome. There are no decorative subtitles or instructional paragraphs.
 
 The light canvas uses cool whites, sea-glass teal, opaque dark text, and one
 original folded-surface wallpaper. Glass is concentrated in finish controls and

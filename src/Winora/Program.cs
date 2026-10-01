@@ -43,7 +43,7 @@ public static class Program
             app.InitializeComponent();
             if (args.Length >= 2 && args[0] == "--render-preview")
             {
-                var width = args.Length >= 5 ? int.Parse(args[3]) : 960;
+                var width = args.Length >= 5 ? int.Parse(args[3]) : 1080;
                 var height = args.Length >= 5 ? int.Parse(args[4]) : 720;
                 var window = new MainWindow(previewOnly: true) { Width = width, Height = height };
                 if (args.Length >= 3)
