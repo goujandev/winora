@@ -59,7 +59,7 @@
          <Border x:Name="PreviewBar" Background="#EE202020" BorderBrush="#30FFFFFF" BorderThickness="0,1,0,0">
           <Grid Margin="12,0">
            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-            <TextBlock Text="&#xE782;" FontFamily="Segoe MDL2 Assets" FontSize="17" Foreground="#A6CEFF" Margin="0,0,16,0" />
+            <Path Data="M 0,0 H 7 V 7 H 0 Z M 9,0 H 16 V 7 H 9 Z M 0,9 H 7 V 16 H 0 Z M 9,9 H 16 V 16 H 9 Z" Width="16" Height="16" Fill="#A6CEFF" Margin="0,0,16,0" VerticalAlignment="Center" />
             <TextBlock Text="&#xE721;" FontFamily="Segoe MDL2 Assets" FontSize="15" Margin="0,0,16,0" />
             <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" FontSize="17" Foreground="#ECD394" Margin="0,0,16,0" />
             <TextBlock Text="&#xE774;" FontFamily="Segoe MDL2 Assets" FontSize="17" Foreground="#A4D8E9" />
