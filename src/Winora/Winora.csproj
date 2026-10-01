@@ -6,7 +6,7 @@
     <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
     <StartupObject>Winora.Program</StartupObject>
     <AssemblyName>Winora</AssemblyName>
-    <Version>0.1.4</Version>
+    <Version>0.1.5</Version>
     <Product>Winora</Product>
     <Description>Personalise your Windows desktop.</Description>
     <ApplicationManifest>app.manifest</ApplicationManifest>
