@@ -44,13 +44,26 @@ public static class Program
             if (args.Length >= 2 && args[0] == "--render-preview")
             {
                 var width = args.Length >= 5 ? int.Parse(args[3]) : 960;
-                var height = args.Length >= 5 ? int.Parse(args[4]) : 820;
+                var height = args.Length >= 5 ? int.Parse(args[4]) : 720;
                 var window = new MainWindow(previewOnly: true) { Width = width, Height = height };
                 if (args.Length >= 3)
                 {
                     var mode = Enum.Parse<TaskbarMode>(args[2]);
                     if (mode == TaskbarMode.Default) window.DefaultMode.IsChecked = true;
                     else if (mode == TaskbarMode.Acrylic) window.AcrylicMode.IsChecked = true;
+                }
+                // Screenshot scenarios stay behind the no-side-effects preview guard.
+                if (args.Contains("--tray")) window.TrayIconsCheckBox.IsChecked = true;
+                if (args.Contains("--checking"))
+                {
+                    window.ActivityLabel.Text = "Changing finish…";
+                    window.ActivityLabel.Visibility = Visibility.Visible;
+                }
+                if (args.Contains("--error"))
+                {
+                    window.StatusLabel.Text = "Couldn’t change finish. Windows prevented the taskbar change.";
+                    window.StatusLabel.Tag = "Error";
+                    window.RetryButton.Visibility = Visibility.Visible;
                 }
                 var content = (FrameworkElement)window.Content;
                 content.Measure(new Size(width, height));

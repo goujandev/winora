@@ -1,5 +1,8 @@
 using System.IO;
 using System.Text.Json;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using Winora;
 
@@ -50,6 +53,34 @@ internal static class DevChecks
             var app = new App(); app.InitializeComponent();
             var window = new MainWindow(previewOnly: true);
             Check(window.Title == "Winora Dev" && ((System.Windows.FrameworkElement)window.FindName("DevBadge")).Visibility == System.Windows.Visibility.Visible, "Dev window is visibly labelled");
+            var previewPreferences = File.ReadAllBytes(Settings.FilePath);
+            ((RadioButton)window.FindName("DefaultMode")).IsChecked = true;
+            ((RadioButton)window.FindName("AcrylicMode")).IsChecked = true;
+            ((CheckBox)window.FindName("StartupCheckBox")).IsChecked = true;
+            ((CheckBox)window.FindName("TrayIconsCheckBox")).IsChecked = true;
+            Check(previewPreferences.SequenceEqual(File.ReadAllBytes(Settings.FilePath)), "Offscreen preview interactions never save preferences");
+
+            var liveWindow = new MainWindow();
+            liveWindow.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                ((RadioButton)liveWindow.FindName("DefaultMode")).IsChecked = true;
+                ((RadioButton)liveWindow.FindName("TransparentMode")).IsChecked = true;
+                ((RadioButton)liveWindow.FindName("AcrylicMode")).IsChecked = true;
+            }));
+            var immediateSaved = PumpUntil(() => Settings.Load().Mode == TaskbarMode.Acrylic && !Settings.Load().StartWithWindows
+                && ((TextBlock)liveWindow.FindName("StatusLabel")).Text == "Preview saved");
+            Check(immediateSaved, "Clicking a finish immediately saves the latest dev preference without Apply");
+            liveWindow.Dispatcher.BeginInvoke(new Action(() => ((CheckBox)liveWindow.FindName("StartupCheckBox")).IsChecked = true));
+            Check(PumpUntil(() => Settings.Load().StartWithWindows), "Startup changes save immediately without changing the finish");
+            liveWindow.Dispatcher.BeginInvoke(new Action(() => ((CheckBox)liveWindow.FindName("TrayIconsCheckBox")).IsChecked = false));
+            Check(PumpUntil(() => !Settings.Load().AlwaysShowTrayIcons)
+                && ((FrameworkElement)liveWindow.FindName("TrayPreviewOverflow")).Visibility == Visibility.Visible
+                && ((FrameworkElement)liveWindow.FindName("TrayPreviewApps")).Visibility == Visibility.Collapsed,
+                "Tray preference and functional preview update immediately");
+            Check(JsonSerializer.Serialize(before) == JsonSerializer.Serialize(ReadProductionPreferences())
+                && startupBefore == RegistrySnapshot(@"Software\Microsoft\Windows\CurrentVersion\Run")
+                && trayPreferenceBefore == RegistrySnapshot(@"Software\Winora\TrayIcons\Preference"),
+                "Immediate dev UI changes leave production data and Windows startup/tray preferences unchanged");
         }
         finally
         {
@@ -67,5 +98,17 @@ internal static class DevChecks
     {
         if (content is null) { if (File.Exists(path)) File.Delete(path); }
         else File.WriteAllBytes(path, content);
+    }
+    private static bool PumpUntil(Func<bool> condition)
+    {
+        if (condition()) return true;
+        var frame = new DispatcherFrame();
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(20) };
+        timer.Tick += (_, _) => { if (condition() || DateTime.UtcNow >= deadline) frame.Continue = false; };
+        timer.Start();
+        try { Dispatcher.PushFrame(frame); }
+        finally { timer.Stop(); }
+        return condition();
     }
 }

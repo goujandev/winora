@@ -17,7 +17,7 @@ public sealed class TaskbarService
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
     public bool IsRunning { get { if (AppBuild.IsDevelopment) return false; using var process = FindOwnedProcess(); return process is not null; } }
-    public string DescribeStatus() => IsRunning ? "Your taskbar appearance is active." : "Ready. Choose an appearance and apply it.";
+    public string DescribeStatus() => IsRunning ? "Taskbar effects active" : "Windows default";
 
     public async Task ApplyAsync(TaskbarMode mode, bool startWithWindows = false, IProgress<string>? progress = null)
     {

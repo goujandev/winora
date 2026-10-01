@@ -37,13 +37,13 @@ production binaries remain under their existing Debug/Release directories.
 ## Isolation and scope
 
 - The window title, header, and executable identify **Winora Dev**. An amber
-  **DEV PREVIEW · Windows changes disabled** badge stays visible.
+  **PREVIEW ONLY** badge stays visible.
 - Dev preferences, preview configuration, and error logs use
   `%LocalAppData%\WinoraDev`, separate from `%LocalAppData%\Winora`.
 - Dev uses its own single-instance mutex and bypasses all Velopack hooks and
   release feeds, including environment-based update-source overrides.
 - Taskbar finishes, the startup checkbox, and tray automation can be exercised
-  as preview preferences. Apply saves only dev files. Dev never downloads or
+  as preview preferences. Selections save immediately to dev files. Dev never downloads or
   launches the native engine/helper, changes registry/startup entries, installs
   frameworks, or stops production processes.
 - Windows taskbars and tray visibility are shared per desktop/user. Real effect

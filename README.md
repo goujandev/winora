@@ -9,7 +9,7 @@ Download `Winora-win-Setup.exe` from
 [GitHub Releases](https://github.com/goujandev/winora/releases).
 Windows 11 **x64** is required. The preview installer is unsigned.
 
-Choose Default, Transparent, or Acrylic, then select **Apply**.
+Select Default, Transparent, or Acrylic to change the finish immediately.
 The settings window exits completely when closed. The separate native engine
 maintains the taskbar effect and keeps its original TranslucentTB tray menu as
 an independent exit route. Default stops the engine and restores Windows.
@@ -23,7 +23,7 @@ The control reports unavailable Windows configurations and failures. See
 [tray behavior, limitations, and validation](docs/TRAY_ICONS.md).
 
 Winora checks for updates and downloads them when the settings app opens.
-The version and **Check for updates** action are in the global sidebar footer.
+The version and **Check for updates** action are in the application footer.
 Select **Restart to update** there to install a downloaded release immediately;
 otherwise the staged update is applied when you next reopen Winora. There is no
 always-running .NET updater or scheduled update task in this prototype. A PC

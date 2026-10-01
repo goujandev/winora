@@ -39,6 +39,8 @@ try
 }
 finally { if (File.Exists(temporary)) File.Delete(temporary); }
 
+await ImmediateChangeChecks.Run(Check);
+
 // Opt-in integration check changes the taskbar temporarily and restores it in finally.
 if (args.Length == 2 && args[0] == "--engine")
 {

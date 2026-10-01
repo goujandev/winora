@@ -19,6 +19,8 @@ jobs:
         run: dotnet tool install --global vpk --version 1.2.0
       - name: Run configuration checks
         run: dotnet run --project tests/Winora.Checks -c Release
+      - name: Run development isolation and UI checks
+        run: dotnet run --project tests/Winora.DevChecks -c Development
       - name: Test native tray preference watcher
         shell: pwsh
         run: ./scripts/Test-TrayAgent.ps1
