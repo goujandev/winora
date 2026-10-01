@@ -82,12 +82,18 @@ To test fullscreen-game routing with at least two monitors:
    fullscreen games** on.
 2. For borderless fullscreen, open **Games… → Add game…** and select the game's
    actual executable. Exclusive Direct3D fullscreen games are detected
-   automatically.
+   automatically. Registered games stay outside the tiling engine, including
+   windowed mode, so they keep their chosen monitor when launched.
 3. Enter fullscreen on one monitor, then leave fullscreen. Tiles should move to
    another available monitor and return when fullscreen ends.
 
 Normal Dev saves this preference and the game list only as previews; it does not
 move application windows. Use `-TestTiling` for the live test.
+
+Winora's own window now participates in tiling. For a custom-window application
+that starts floating, use **Apps… → Add app…** to remember its executable. Native
+application size limits are respected. Games and standard dialogs take
+precedence over this override.
 
 ## Checks and production releases
 

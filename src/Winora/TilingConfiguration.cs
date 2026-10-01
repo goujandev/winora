@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Text;
+using System.IO;
+using System.Text.RegularExpressions;
 
 namespace Winora;
 
@@ -10,7 +12,8 @@ public static class TilingConfiguration
 
     // GlazeWM v3.10.1 configuration. Keep every managed monitor on its own
     // workspace, with no workspace-switch bindings or external commands.
-    public static string Build(int gap, int monitorCount = 1)
+    public static string Build(int gap, int monitorCount = 1, string[]? excludedGameExecutables = null,
+        string[]? tiledAppExecutables = null)
     {
         if (gap is < MinimumGap or > MaximumGap) throw new ArgumentOutOfRangeException(nameof(gap));
         if (monitorCount is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(monitorCount));
@@ -61,14 +64,18 @@ public static class TilingConfiguration
             config.Append('\n').Append("  - name: 'monitor-").Append(monitor + 1).Append("'\n")
                 .Append("    bind_to_monitor: ").Append(monitor);
         }
-        config.Append('\n').Append("""
-            window_rules:
+        config.Append("\nwindow_rules:\n");
+        AppendApplicationRule(config, "ignore", excludedGameExecutables);
+        config.Append("""
               - commands: ['ignore']
                 match:
-                  - window_process: { regex: '^Winora(\.Dev)?$' }
                   - window_process: { regex: '^(SearchHost|SearchApp|StartMenuExperienceHost|ShellExperienceHost|ScreenClippingHost|LockApp|zebar|Zebar)$' }
                   - window_title: { regex: '[Pp]icture.in.[Pp]icture' }
                     window_class: { regex: 'Chrome_WidgetWin_1|MozillaDialogClass' }
+            """);
+        config.Append('\n');
+        AppendApplicationRule(config, "set-tiling", tiledAppExecutables);
+        config.Append("""
               - commands: ['set-floating --centered=false']
                 match:
                   - window_class: { equals: '#32770' }
@@ -109,5 +116,19 @@ public static class TilingConfiguration
                 bindings: ['alt+shift+e']
             """);
         return config.Append('\n').ToString();
+    }
+
+    private static void AppendApplicationRule(StringBuilder config, string command, string[]? executables)
+    {
+        var names = (executables ?? []).Where(path => !string.IsNullOrWhiteSpace(path)
+            && Path.IsPathFullyQualified(path) && string.Equals(Path.GetExtension(path), ".exe", StringComparison.OrdinalIgnoreCase))
+            // GlazeWM 3.10.1 exposes the part before the first dot as processName.
+            .Select(path => Path.GetFileName(path).Split('.')[0]).Where(name => name.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
+        if (names.Length == 0) return;
+        config.Append("  - commands: ['").Append(command).Append("']\n    match:\n");
+        foreach (var name in names)
+            config.Append("      - window_process: { regex: '(?i)^")
+                .Append(Regex.Escape(name).Replace("'", "''", StringComparison.Ordinal)).Append("$' }\n");
     }
 }

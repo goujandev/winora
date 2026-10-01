@@ -23,6 +23,7 @@ public partial class MainWindow
         TilingEnabledCheckBox.IsChecked = settings.TilingEnabled;
         TilingGapSlider.Value = settings.TilingGap;
         InitializeFullscreenRouting(settings);
+        InitializeApplicationRules(settings);
         RenderTilingPreview(settings.TilingGap);
         if (AppBuild.IsDevelopment && !AppBuild.AllowTilingEffects)
             TilingEnabledCheckBox.ToolTip = "Preview only. Run dev.cmd -TestTiling to test real window movement.";
@@ -69,6 +70,7 @@ public partial class MainWindow
         TilingRetileButton.ToolTip = tilingPaused ? "Resume tiling before rearranging windows." : null;
         RetryTilingButton.IsEnabled = available;
         RefreshFullscreenRoutingInteractionState(available);
+        RefreshApplicationRulesInteractionState(available);
         TilingPauseButton.Content = tilingPaused ? "Resume" : "Pause";
         System.Windows.Automation.AutomationProperties.SetName(TilingPauseButton,
             tilingPaused ? "Resume automatic tiling" : "Pause automatic tiling");

@@ -231,6 +231,20 @@
      <CheckBox x:Name="TilingEnabledCheckBox" Style="{StaticResource SettingsCheckBox}" Checked="OnTilingEnabledChanged" Unchecked="OnTilingEnabledChanged" AutomationProperties.Name="Automatically tile windows" AutomationProperties.HelpText="Arranges application windows automatically. Dialogs and excluded windows remain floating.">
       <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE8A9;" FontFamily="Segoe MDL2 Assets" Width="30" VerticalAlignment="Center" Foreground="{DynamicResource Muted}" /><TextBlock Text="Automatically tile windows" VerticalAlignment="Center" /></StackPanel>
      </CheckBox>
+     <Button x:Name="TiledAppsButton" Content="Apps…" Click="OnManageTiledApps" Style="{StaticResource ChromeAction}" HorizontalAlignment="Left" Margin="30,-4,0,8" AutomationProperties.Name="Manage custom-window apps" AutomationProperties.HelpText="Choose apps with custom window frames to keep them tiled. Apps selected as games stay outside tiling." />
+     <Popup x:Name="TiledAppsPopup" Placement="Bottom" PlacementTarget="{Binding ElementName=TiledAppsButton}" StaysOpen="False" AllowsTransparency="True" HorizontalOffset="0" VerticalOffset="6" Focusable="False">
+      <Border Width="300" Background="{DynamicResource ButtonSurface}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="14" Padding="16" Margin="10" TextElement.Foreground="{DynamicResource Ink}" TextElement.FontFamily="Segoe UI Variable, Segoe UI" TextElement.FontSize="14">
+       <Border.Effect><DropShadowEffect Color="{DynamicResource ModeShadowColor}" BlurRadius="16" ShadowDepth="3" Opacity="0.14" /></Border.Effect>
+       <StackPanel>
+        <TextBlock Text="Custom-window apps" FontWeight="SemiBold" Margin="0,0,0,6" />
+        <TextBlock Text="Keep selected apps tiled." Foreground="{DynamicResource Muted}" FontSize="12" TextWrapping="Wrap" />
+        <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False" Margin="0,10,0,0">
+         <StackPanel x:Name="TiledAppsList" />
+        </ScrollViewer>
+        <Button Content="Add app…" Click="OnAddTiledApp" HorizontalAlignment="Left" Margin="0,10,0,0" AutomationProperties.Name="Add an app to keep tiled" />
+       </StackPanel>
+      </Border>
+     </Popup>
      <Border Height="1" Background="{DynamicResource Line}" Margin="0,2,0,14" />
      <Grid>
       <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
@@ -242,13 +256,13 @@
      <CheckBox x:Name="FullscreenRoutingCheckBox" Style="{StaticResource SettingsCheckBox}" Checked="OnFullscreenRoutingChanged" Unchecked="OnFullscreenRoutingChanged" AutomationProperties.Name="Move tiles away from fullscreen games" AutomationProperties.HelpText="Detects exclusive Direct3D fullscreen games automatically. Add games to detect their borderless fullscreen windows. Moves tiles to other available monitors and restores them when fullscreen ends." ToolTip="Moves tiles to other available monitors while a game is fullscreen, then restores them. Add games for borderless fullscreen.">
       <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE7FC;" FontFamily="Segoe MDL2 Assets" Width="30" VerticalAlignment="Center" Foreground="{DynamicResource Muted}" /><TextBlock Text="Move tiles away from fullscreen games" VerticalAlignment="Center" /></StackPanel>
      </CheckBox>
-     <Button x:Name="FullscreenGamesButton" Content="Games…" Click="OnManageFullscreenGames" Style="{StaticResource ChromeAction}" HorizontalAlignment="Left" Margin="30,-4,0,8" AutomationProperties.Name="Manage fullscreen games" />
+     <Button x:Name="FullscreenGamesButton" Content="Games…" Click="OnManageFullscreenGames" Style="{StaticResource ChromeAction}" HorizontalAlignment="Left" Margin="30,-4,0,8" AutomationProperties.Name="Manage fullscreen games" AutomationProperties.HelpText="Selected games stay outside tiling, including in windowed mode." />
      <Popup x:Name="FullscreenGamesPopup" Placement="Bottom" PlacementTarget="{Binding ElementName=FullscreenGamesButton}" StaysOpen="False" AllowsTransparency="True" HorizontalOffset="0" VerticalOffset="6" Focusable="False">
       <Border Width="300" Background="{DynamicResource ButtonSurface}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="14" Padding="16" Margin="10" TextElement.Foreground="{DynamicResource Ink}" TextElement.FontFamily="Segoe UI Variable, Segoe UI" TextElement.FontSize="14">
        <Border.Effect><DropShadowEffect Color="{DynamicResource ModeShadowColor}" BlurRadius="16" ShadowDepth="3" Opacity="0.14" /></Border.Effect>
        <StackPanel>
         <TextBlock Text="Games" FontWeight="SemiBold" Margin="0,0,0,6" />
-        <TextBlock Text="Add games that use borderless fullscreen." Foreground="{DynamicResource Muted}" FontSize="12" TextWrapping="Wrap" />
+        <TextBlock Text="Add games that use borderless fullscreen. Selected games stay outside tiling, including in windowed mode." Foreground="{DynamicResource Muted}" FontSize="12" TextWrapping="Wrap" />
         <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False" Margin="0,10,0,0">
          <StackPanel x:Name="FullscreenGamesList" />
         </ScrollViewer>

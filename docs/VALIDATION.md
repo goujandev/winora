@@ -4,6 +4,32 @@ Development PC: Windows 11 25H2, build 26200.9457, x64.
 
 ## Experimental tiling (development branch)
 
+Game placement and application compatibility verification (2026-10-02):
+
+- 107 production checks and 49 isolated Dev checks pass. Release and Development
+  builds compile with no warnings or errors.
+- All 20 checks in a bounded live regression pass. A separate game executable
+  first opens on the left monitor while the manager is focused on the primary
+  monitor, remains excluded from initial placement, and enters borderless
+  fullscreen on its original monitor. Four disposable background tiles move to
+  the other two monitors, retain the game's native focus, and return after exit.
+- A native fixed-frame WPF window starts floating; selecting its executable
+  makes it tile and physically changes its rectangle. The actual Winora
+  MainWindow also tiles with its custom chrome.
+- Test configuration admitted only disposable fixture processes. Production
+  preferences and the verified engine cache remained unchanged; test settings,
+  configuration, routing files and log contents were restored afterward.
+- In the user's live Dev session, Winora and Peg Leg were both confirmed in
+  the engine's tiling state. Peg Leg's native rectangle changed from 116 x 105
+  to 824 x 1348 pixels. Fortnite and Peg Leg were added only to isolated Dev
+  preferences, preserving the other preferences.
+- Registered games remain outside tiling in windowed mode too. This protects
+  their chosen monitor before fullscreen detection can react; removing a game
+  exclusion requires reopening that game or restarting Winora's owned engine.
+- The compact Apps control was reviewed in a dark offscreen render. Elevated
+  applications, restrictive native size limits and real game mode transitions
+  remain part of hands-on beta coverage.
+
 Fullscreen-game routing verification:
 
 - 102 production checks and 44 isolated Dev checks pass, including 31 routing

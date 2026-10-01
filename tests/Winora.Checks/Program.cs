@@ -75,6 +75,13 @@ try
     Settings.Save(routedPreferences with { FullscreenGameExecutables = [] }, temporary);
     Check(Settings.Load(temporary).FullscreenGameExecutables is null,
         "Removing the last configured game returns to automatic exclusive-game detection");
+    var customPath = Path.Combine(Path.GetTempPath(), "custom-window-app.exe");
+    Settings.Save(tilingPreferences with { TiledAppExecutables = [customPath, customPath.ToUpperInvariant(), "relative.exe"] }, temporary);
+    var appPreferences = Settings.Load(temporary);
+    Check(appPreferences.TiledAppExecutables is { Length: 1 }
+        && string.Equals(appPreferences.TiledAppExecutables[0], customPath, StringComparison.OrdinalIgnoreCase)
+        && (appPreferences with { TiledAppExecutables = null }) == tilingPreferences,
+        "Custom-window app choices persist independently with absolute, deduplicated executable paths");
 }
 finally { if (File.Exists(temporary)) File.Delete(temporary); }
 

@@ -22,10 +22,10 @@ saved before enabling it. Windows opened afterwards remain where they are.
 | Alt + Shift + E | Exit the engine when not paused |
 
 If paused, resume before using the exit shortcut. The Winora toggle and engine
-tray menu can stop tiling directly. Winora's window and Windows shell surfaces
-are excluded; ordinary dialogs float. There is one tiling workspace per monitor.
-This first version does not add virtual desktops, application rules, configurable
-shortcuts, or a separate bar.
+tray menu can stop tiling directly. Winora tiles alongside other applications;
+Windows shell surfaces are excluded and ordinary dialogs float. There is one
+tiling workspace per monitor. This version does not add virtual desktops,
+configurable shortcuts, or a separate bar.
 
 On production builds, the existing **Start Winora with Windows** preference
 restores enabled tiling at sign-in. Closing the production settings window leaves
@@ -36,6 +36,13 @@ Tiling currently requires Windows 11 x64. Applications with unusual window
 frames, fixed sizes, or elevated privileges may not arrange normally. Pause,
 float an affected window, or disable tiling if an application behaves poorly.
 The engine's own tray menu remains available as an independent recovery route.
+
+**Apps… → Add app…** remembers applications with custom or fixed-size frames
+that would otherwise start floating. Their eligible windows join the tiling
+layout immediately and on future launches. Standard dialogs and picture-in-picture
+windows keep their existing behavior. Native size restrictions still apply;
+Winora cannot make an application resize its contents if it refuses to resize.
+Game exclusions take precedence over custom-app tiling rules.
 
 ## Fullscreen games
 
@@ -50,7 +57,15 @@ Windows positively reports exclusive Direct3D fullscreen through
 [SHQueryUserNotificationState](https://learn.microsoft.com/en-us/windows/win32/api/shellapi/ne-shellapi-query_user_notification_state).
 For borderless games, choose **Games… → Add game…** and select the game's actual
 executable, rather than its launcher. Other graphics APIs may also require this
-selection. Fullscreen browser/video windows reserve their monitor but do not
+selection. Registered games stay outside tiling in every window mode, so the
+tiling engine cannot move them to its currently focused monitor during launch.
+Fullscreen background redistribution still follows their actual monitor.
+Full-monitor borderless client surfaces are detected even when a registered game
+retains maximized/title-bar style flags. Adding a game reloads the rules for
+already managed windows; removing an exclusion requires reopening that game
+before its windows can join tiling again.
+
+Fullscreen browser/video windows reserve their monitor but do not
 trigger redistribution unless you explicitly add their application or they use
 exclusive Direct3D themselves. Windows reports a graphics mode, not a game label.
 

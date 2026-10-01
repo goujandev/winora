@@ -20,7 +20,7 @@ internal sealed class FullscreenGameDetector
         var result = new List<NativeFullscreenWindow>();
         WindowCallback callback = (window, parameter) =>
         {
-            if (!TryGetFullscreenMonitor(window, out var device)) return true;
+            if (!TryGetFullscreenMonitor(window, out var device, out var requiresGameIdentity)) return true;
             _ = GetWindowThreadProcessId(window, out var processId);
             if (processId == 0) return true;
             if (TryGetProcessIdentity((int)processId, out var started, out var executable))
@@ -31,13 +31,14 @@ internal sealed class FullscreenGameDetector
                 var game = configured.Contains(executable) || detectedGames.Contains(identity);
                 if (!game && window == foreground && SHQueryUserNotificationState(out var notificationState) == 0 && notificationState == 3)
                 { detectedGames.Add(identity); game = true; }
+                if (requiresGameIdentity && !game) return true;
                 result.Add(new((long)window, (int)processId, started, executable, device, game));
             }
             else
             {
                 // Unknown/elevated fullscreen apps still occupy a screen. They
                 // are never guessed to be games or used as free destinations.
-                if (IsWindow(window)) result.Add(new((long)window, (int)processId, 0, "", device, IsGame: false));
+                if (!requiresGameIdentity && IsWindow(window)) result.Add(new((long)window, (int)processId, 0, "", device, IsGame: false));
             }
             return true;
         };
@@ -83,9 +84,10 @@ internal sealed class FullscreenGameDetector
         finally { _ = CloseHandle(process); }
     }
 
-    private static bool TryGetFullscreenMonitor(nint window, out string device)
+    private static bool TryGetFullscreenMonitor(nint window, out string device, out bool requiresGameIdentity)
     {
         device = "";
+        requiresGameIdentity = false;
         if (window == GetDesktopWindow() || window == GetShellWindow()) return false;
         if (!IsWindowVisible(window) || IsIconic(window) || GetWindow(window, 4 /* GW_OWNER */) != 0) return false;
         var className = new StringBuilder(256);
@@ -94,8 +96,7 @@ internal sealed class FullscreenGameDetector
         var style = GetWindowLongPtr(window, -16 /* GWL_STYLE */).ToInt64();
         var extended = GetWindowLongPtr(window, -20 /* GWL_EXSTYLE */).ToInt64();
         if ((style & 0x40000000L /* WS_CHILD */) != 0 || (extended & 0x80L /* WS_EX_TOOLWINDOW */) != 0) return false;
-        // Ordinary maximized windows occupy the work area, not a game screen.
-        if (IsZoomed(window) && (style & 0x00C00000L /* WS_CAPTION */) != 0) return false;
+        var maximizedCaption = IsZoomed(window) && (style & 0x00C00000L /* WS_CAPTION */) != 0;
         if (DwmGetWindowAttribute(window, 14 /* DWMWA_CLOAKED */, out int cloaked, sizeof(int)) == 0 && cloaked != 0) return false;
         var monitor = MonitorFromWindow(window, 0 /* MONITOR_DEFAULTTONULL */);
         if (monitor == 0) return false;
@@ -103,16 +104,34 @@ internal sealed class FullscreenGameDetector
         if (!GetMonitorInfo(monitor, ref info)) return false;
         if (DwmGetWindowAttribute(window, 9 /* EXTENDED_FRAME_BOUNDS */, out Rect frame, Marshal.SizeOf<Rect>()) != 0 &&
             !GetWindowRect(window, out frame)) return false;
-        if (!SameBounds(frame, info.Monitor)) return false;
+        var visibleFullscreen = SameBounds(frame, info.Monitor);
+        if (!visibleFullscreen && (!CouldCoverMonitor(frame, info.Monitor) || !ClientCoversMonitor(window, info.Monitor))) return false;
+        // Registered games can retain maximized/caption/border styles while
+        // rendering a full-monitor client surface. Ordinary maximized apps
+        // still fail the geometry check or require a positive game identity.
+        requiresGameIdentity = maximizedCaption || !visibleFullscreen;
         device = info.Device;
         return true;
+    }
+
+    private static bool ClientCoversMonitor(nint window, Rect monitor)
+    {
+        if (!GetClientRect(window, out var client)) return false;
+        var topLeft = new Point { X = client.Left, Y = client.Top };
+        var bottomRight = new Point { X = client.Right, Y = client.Bottom };
+        if (!ClientToScreen(window, ref topLeft) || !ClientToScreen(window, ref bottomRight)) return false;
+        return SameBounds(new Rect { Left = topLeft.X, Top = topLeft.Y, Right = bottomRight.X, Bottom = bottomRight.Y }, monitor);
     }
 
     private static bool SameBounds(Rect frame, Rect monitor) => Math.Abs(frame.Left - monitor.Left) <= 2 &&
         Math.Abs(frame.Top - monitor.Top) <= 2 && Math.Abs(frame.Right - monitor.Right) <= 2 && Math.Abs(frame.Bottom - monitor.Bottom) <= 2;
 
+    private static bool CouldCoverMonitor(Rect frame, Rect monitor) => frame.Left <= monitor.Left + 2 &&
+        frame.Top <= monitor.Top + 2 && frame.Right >= monitor.Right - 2 && frame.Bottom >= monitor.Bottom - 2;
+
     private delegate bool WindowCallback(nint window, nint parameter);
     [StructLayout(LayoutKind.Sequential)] private struct Rect { public int Left, Top, Right, Bottom; }
+    [StructLayout(LayoutKind.Sequential)] private struct Point { public int X, Y; }
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] private struct MonitorInfo
     {
         public uint Size;
@@ -135,6 +154,8 @@ internal sealed class FullscreenGameDetector
     [DllImport("user32.dll")] private static extern nint MonitorFromWindow(nint window, uint flags);
     [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "GetMonitorInfoW")] private static extern bool GetMonitorInfo(nint monitor, ref MonitorInfo info);
     [DllImport("user32.dll")] private static extern bool GetWindowRect(nint window, out Rect rect);
+    [DllImport("user32.dll")] private static extern bool GetClientRect(nint window, out Rect rect);
+    [DllImport("user32.dll")] private static extern bool ClientToScreen(nint window, ref Point point);
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(nint window, out uint processId);
     [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(nint window, uint attribute, out int value, int size);
     [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(nint window, uint attribute, out Rect value, int size);

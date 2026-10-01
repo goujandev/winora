@@ -260,9 +260,17 @@ public sealed class TilingService
     {
         if (!AppBuild.AllowTilingEffects) return;
         await Changes.WaitAsync();
-        try { await RefreshFullscreenRoutingCoreAsync(); }
+        try
+        {
+            // Register game exclusions in the engine before polling can see
+            // their fullscreen surface. Its manage event precedes our worker.
+            if (IsRunning) await ChangeConfigurationAsync(Settings.Load().TilingGap);
+            await RefreshFullscreenRoutingCoreAsync();
+        }
         finally { Changes.Release(); }
     }
+
+    public Task RefreshApplicationRulesAsync() => RefreshFullscreenRoutingAsync();
 
     private static async Task RefreshFullscreenRoutingCoreAsync()
     {
@@ -412,7 +420,9 @@ public sealed class TilingService
     {
         Directory.CreateDirectory(DirectoryPath);
         var temporary = ConfigurationPath + ".tmp";
-        await File.WriteAllTextAsync(temporary, TilingConfiguration.Build(gap, monitors));
+        var settings = Settings.Load();
+        await File.WriteAllTextAsync(temporary, TilingConfiguration.Build(gap, monitors,
+            settings.FullscreenGameExecutables, settings.TiledAppExecutables));
         File.Move(temporary, ConfigurationPath, overwrite: true);
     }
 

@@ -34,9 +34,23 @@ internal static class TilingChecks
             && Regex.IsMatch(config, @"(?m)^\s*shutdown_commands:\s*\[\s*\]\s*$")
             && !config.Contains("shell-exec", StringComparison.OrdinalIgnoreCase),
             "The tiling engine cannot launch bars, scripts or other apps from Winora's configuration");
-        check(config.Contains("Winora", StringComparison.Ordinal)
-            && config.Contains("ignore", StringComparison.Ordinal),
-            "Winora's own controls are excluded from automatic tiling");
+        check(!config.Contains("^Winora", StringComparison.Ordinal)
+            && config.Contains("SearchHost", StringComparison.Ordinal),
+            "Winora tiles with ordinary apps while Windows shell surfaces remain excluded");
+        var gamePath = @"C:\Games\Sample.Game.exe";
+        var appPath = @"C:\Apps\Custom+App.exe";
+        var rules = TilingConfiguration.Build(8, 3, [gamePath, gamePath.ToUpperInvariant()], [appPath, gamePath]);
+        check(rules.Contains("window_process: { regex: '(?i)^Sample$' }", StringComparison.Ordinal)
+            && rules.IndexOf("commands: ['ignore']", StringComparison.Ordinal) < rules.IndexOf("commands: ['set-tiling']", StringComparison.Ordinal),
+            "Registered games are excluded before a custom-app tiling override can relocate them");
+        check(rules.Contains("(?i)^Custom\\+App$", StringComparison.Ordinal)
+            && Regex.Matches(rules, @"commands: \['ignore'\]").Count == 2,
+            "Executable matching escapes punctuation and handles GlazeWM's first-dot process names");
+        check(rules.IndexOf("commands: ['set-tiling']", StringComparison.Ordinal) < rules.IndexOf("commands: ['set-floating", StringComparison.Ordinal),
+            "Custom-window app overrides retain floating standard dialogs and copy dialogs");
+        check(!TilingConfiguration.Build(8, excludedGameExecutables: ["relative.exe", @"C:\Games\invalid.txt"])
+            .Contains("(?i)", StringComparison.Ordinal),
+            "Invalid executable selections cannot generate game-exclusion rules");
         check(config.Contains("wm-toggle-pause", StringComparison.Ordinal)
             && config.Contains("alt+shift+p", StringComparison.Ordinal)
             && config.Contains("wm-exit", StringComparison.Ordinal)

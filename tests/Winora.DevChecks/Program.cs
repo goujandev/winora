@@ -234,6 +234,76 @@ internal static class DevChecks
             liveWindow.Dispatcher.BeginInvoke(new Action(() => fullscreenRouting.IsChecked = true));
             if (!PumpUntil(() => Settings.Load().MoveTilesForFullscreenGames && fullscreenRouting.IsEnabled))
                 throw new InvalidOperationException("Could not restore the fullscreen-routing preference after the retry check.");
+            var tiledAppsButton = (Button)liveWindow.FindName("TiledAppsButton");
+            var tiledAppsList = (StackPanel)liveWindow.FindName("TiledAppsList");
+            var changeTiledApps = typeof(MainWindow).GetMethod("ChangeTiledAppsAsync",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("The tiled-app preference action is missing.");
+            Task? appRuleChange = null;
+            void QueueAppRuleChange(Func<string[]?, string[]?> change)
+            {
+                appRuleChange = null;
+                liveWindow.Dispatcher.BeginInvoke(new Action(() =>
+                    appRuleChange = (Task)changeTiledApps.Invoke(liveWindow, [change])!));
+            }
+            var beforeTiledApps = Settings.Load();
+            var customApp = Path.GetFullPath(@"C:\Applications\Custom Frame.exe");
+            var afterAddingApp = beforeTiledApps with { TiledAppExecutables = [customApp] };
+            var appRulesConfigBefore = File.Exists(tilingConfigPath) ? File.ReadAllBytes(tilingConfigPath) : null;
+            var appRulesProcessesBefore = GlazeProcessIds();
+            QueueAppRuleChange(_ => [customApp]);
+            Check(PumpUntil(() => appRuleChange?.IsCompletedSuccessfully == true && tiledAppsButton.IsEnabled
+                && SamePreferences(Settings.Load(), afterAddingApp)) && !new TilingService().IsRunning
+                && appRulesProcessesBefore.SequenceEqual(GlazeProcessIds())
+                && JsonSerializer.Serialize(appRulesConfigBefore)
+                    == JsonSerializer.Serialize(File.Exists(tilingConfigPath) ? File.ReadAllBytes(tilingConfigPath) : null),
+                "Adding a custom-window app changes only Dev preferences without starting an engine or rewriting its configuration");
+            var customAppRow = tiledAppsList.Children.OfType<DockPanel>().Single();
+            var customAppLabel = customAppRow.Children.OfType<TextBlock>().Single();
+            var removeCustomApp = customAppRow.Children.OfType<Button>().Single();
+            Check(customAppLabel.Text == "Custom Frame" && Equals(customAppLabel.ToolTip, customApp)
+                && System.Windows.Automation.AutomationProperties.GetName(removeCustomApp) == "Remove Custom Frame",
+                "Custom-window apps show a concise name, full path tooltip and accessible removal action");
+            liveWindow.Dispatcher.BeginInvoke(new Action(() =>
+                removeCustomApp.RaiseEvent(new RoutedEventArgs(Button.ClickEvent, removeCustomApp))));
+            Check(PumpUntil(() => tiledAppsList.Children.Count == 0 && tiledAppsButton.IsEnabled
+                && SamePreferences(Settings.Load(), beforeTiledApps)),
+                "Removing a custom-window app updates its list and preserves every other preference");
+            QueueAppRuleChange(_ => [customApp]);
+            if (!PumpUntil(() => appRuleChange?.IsCompletedSuccessfully == true && tiledAppsButton.IsEnabled
+                && SamePreferences(Settings.Load(), afterAddingApp)))
+                throw new InvalidOperationException("Could not prepare the tiled-app Retry check.");
+            var appRulesTemporaryBefore = File.Exists(temporaryPreferences) ? File.ReadAllBytes(temporaryPreferences) : null;
+            try
+            {
+                using (var lockedPreferences = new FileStream(temporaryPreferences, FileMode.OpenOrCreate,
+                    FileAccess.ReadWrite, FileShare.None))
+                {
+                    removeCustomApp = tiledAppsList.Children.OfType<DockPanel>().Single().Children.OfType<Button>().Single();
+                    liveWindow.Dispatcher.BeginInvoke(new Action(() =>
+                        removeCustomApp.RaiseEvent(new RoutedEventArgs(Button.ClickEvent, removeCustomApp))));
+                    Check(PumpUntil(() => tilingRetry.Visibility == Visibility.Visible && tilingRetry.IsEnabled
+                        && tiledAppsButton.IsEnabled && tiledAppsList.Children.Count == 1
+                        && SamePreferences(Settings.Load(), afterAddingApp) && tilingStatus.Text.Contains("tiled apps")),
+                        "A failed custom-app removal restores the list and preferences with a usable Retry");
+                }
+                liveWindow.Dispatcher.BeginInvoke(new Action(() =>
+                    tilingRetry.RaiseEvent(new RoutedEventArgs(Button.ClickEvent, tilingRetry))));
+                Check(PumpUntil(() => tiledAppsList.Children.Count == 0 && tiledAppsButton.IsEnabled
+                    && SamePreferences(Settings.Load(), beforeTiledApps) && tilingRetry.Visibility == Visibility.Collapsed),
+                    "Custom-app Retry reapplies the failed removal while preserving other settings");
+            }
+            finally
+            {
+                try
+                {
+                    QueueAppRuleChange(_ => beforeTiledApps.TiledAppExecutables);
+                    if (!PumpUntil(() => appRuleChange?.IsCompletedSuccessfully == true && tiledAppsButton.IsEnabled
+                        && SamePreferences(Settings.Load(), beforeTiledApps)))
+                        throw new InvalidOperationException("Could not restore tiled-app preferences after the Retry check.");
+                }
+                finally { Restore(temporaryPreferences, appRulesTemporaryBefore); }
+            }
             ((RadioButton)liveWindow.FindName("SettingsNavigation")).IsChecked = true;
             Check(((FrameworkElement)liveWindow.FindName("SettingsPage")).Visibility == Visibility.Visible
                 && ((FrameworkElement)liveWindow.FindName("TaskbarPage")).Visibility == Visibility.Collapsed
@@ -297,6 +367,11 @@ internal static class DevChecks
         using var key = Registry.CurrentUser.OpenSubKey(path);
         return JsonSerializer.Serialize(key?.GetValueNames().Order().ToDictionary(name => name, name => key.GetValue(name)));
     }
+    private static bool SamePreferences(UserSettings left, UserSettings right) =>
+        (left with { TiledAppExecutables = null, FullscreenGameExecutables = null })
+            == (right with { TiledAppExecutables = null, FullscreenGameExecutables = null })
+        && (left.TiledAppExecutables ?? []).SequenceEqual(right.TiledAppExecutables ?? [], StringComparer.OrdinalIgnoreCase)
+        && (left.FullscreenGameExecutables ?? []).SequenceEqual(right.FullscreenGameExecutables ?? [], StringComparer.OrdinalIgnoreCase);
     private static int[] GlazeProcessIds()
     {
         var ids = new List<int>();

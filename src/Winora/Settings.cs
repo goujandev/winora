@@ -9,7 +9,8 @@ public enum TaskbarMode { Default, Transparent, Acrylic }
 
 public sealed record UserSettings(TaskbarMode Mode = TaskbarMode.Default, bool AlwaysShowTrayIcons = false,
     bool DarkMode = false, bool StartWinoraWithWindows = true, bool TilingEnabled = false, int TilingGap = 8,
-    bool MoveTilesForFullscreenGames = true, string[]? FullscreenGameExecutables = null);
+    bool MoveTilesForFullscreenGames = true, string[]? FullscreenGameExecutables = null,
+    string[]? TiledAppExecutables = null);
 
 public static class Settings
 {
@@ -42,10 +43,11 @@ public static class Settings
     private static UserSettings Normalize(UserSettings settings) => settings with
     {
         TilingGap = Math.Clamp(settings.TilingGap, TilingConfiguration.MinimumGap, TilingConfiguration.MaximumGap),
-        FullscreenGameExecutables = NormalizeGames(settings.FullscreenGameExecutables)
+        FullscreenGameExecutables = NormalizeExecutables(settings.FullscreenGameExecutables),
+        TiledAppExecutables = NormalizeExecutables(settings.TiledAppExecutables)
     };
 
-    private static string[]? NormalizeGames(string[]? games)
+    private static string[]? NormalizeExecutables(string[]? games)
     {
         if (games is null) return null;
         var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
