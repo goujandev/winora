@@ -22,6 +22,7 @@ public static class Program
             StartupService.Remove();
             TaskbarService.StopAsync().GetAwaiter().GetResult();
             TrayIconService.DisableAsync().GetAwaiter().GetResult();
+            new TilingService().DisableAsync().GetAwaiter().GetResult();
         }).Run();
         if (!AppBuild.IsDevelopment && args.Length == 0 && Environment.GetEnvironmentVariable("WINORA_STARTUP_PROBE") is { Length: > 0 } probePath)
             args = ["--update-probe", probePath];
@@ -30,6 +31,9 @@ public static class Program
             if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
                 throw new PlatformNotSupportedException("Winora requires Windows 11.");
             if (args.Contains("--startup")) return RestoreFeaturesAtSignIn();
+            if (AppBuild.IsDevelopment && args.Contains("--test-tiling") && !args.Contains("--render-preview"))
+                AppBuild.EnableTilingTest();
+            if (args.Contains("--launch-tiling")) return TilingService.LaunchEngine();
             if (args.Length >= 2 && args[0] == "--update-probe")
             {
                 var updates = new UpdateService();
@@ -58,6 +62,8 @@ public static class Program
                 // Screenshot scenarios stay behind the no-side-effects preview guard.
                 if (args.Contains("--dark")) window.DarkModeCheckBox.IsChecked = true;
                 if (args.Contains("--settings")) window.SettingsNavigation.IsChecked = true;
+                if (args.Contains("--tiling")) window.TilingNavigation.IsChecked = true;
+                if (args.Contains("--tiling-enabled")) window.TilingEnabledCheckBox.IsChecked = true;
                 if (args.Contains("--tray")) window.TrayIconsCheckBox.IsChecked = true;
                 if (args.Contains("--checking"))
                 {
@@ -84,13 +90,18 @@ public static class Program
             }
             using var singleInstance = new Mutex(false, AppBuild.InstanceMutex);
             if (!TryAcquire(singleInstance)) return 0;
-            try { return app.Run(new MainWindow()); }
+            try
+            {
+                var window = new MainWindow();
+                if (AppBuild.IsTilingTest) window.TilingNavigation.IsChecked = true;
+                return app.Run(window);
+            }
             finally { singleInstance.ReleaseMutex(); }
         }
         catch (Exception error)
         {
             LogError(error);
-            if (!args.Contains("--render-preview") && !args.Contains("--update-probe") && !args.Contains("--startup"))
+            if (!args.Contains("--render-preview") && !args.Contains("--update-probe") && !args.Contains("--startup") && !args.Contains("--launch-tiling"))
                 MessageBox.Show(error.Message, AppBuild.Name, MessageBoxButton.OK, MessageBoxImage.Error);
             return 1;
         }

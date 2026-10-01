@@ -1,4 +1,4 @@
-param([switch]$BuildOnly)
+param([switch]$BuildOnly, [switch]$TestTiling)
 $ErrorActionPreference = 'Stop'
 $workspace = Split-Path $PSScriptRoot -Parent
 $dotnet = Join-Path $workspace '.tools/dotnet/dotnet.exe'
@@ -20,7 +20,10 @@ try {
     $env:DOTNET_ROOT = Split-Path $dotnet -Parent
     & $dotnet build (Join-Path $workspace 'src/Winora/Winora.csproj') -c Development
     if ($LASTEXITCODE -ne 0) { throw 'Winora Dev build failed.' }
-    if (-not $BuildOnly) { Start-Process -FilePath $executable -WorkingDirectory $workspace | Out-Null }
+    if (-not $BuildOnly) {
+        if ($TestTiling) { Start-Process -FilePath $executable -ArgumentList '--test-tiling' -WorkingDirectory $workspace | Out-Null }
+        else { Start-Process -FilePath $executable -WorkingDirectory $workspace | Out-Null }
+    }
     Write-Output "Winora Dev: $executable"
 } finally {
     $env:DOTNET_CLI_HOME = $previousHome

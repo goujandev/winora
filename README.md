@@ -64,6 +64,12 @@ before Winora enables its effects. ARM64 is not supported in this prototype.
 
 ## Build
 
+The current development branch also includes optional automatic window tiling.
+Run `.\dev.cmd -TestTiling` to try it in **Winora Dev**, then enable the toggle
+on the Tiling page. Closing that test window stops its engine. See
+[tiling controls and limitations](docs/TILING.md). This feature is experimental
+and has not yet been included in a production release.
+
 Install the .NET 10 SDK on Windows and the pinned packaging tool:
 
 ```powershell
@@ -124,5 +130,6 @@ manual checks.
 See [third-party notices](THIRD_PARTY_NOTICES.txt) and
 [Velopack's licence](licenses/Velopack.txt). TranslucentTB is an unmodified,
 separate upstream executable downloaded directly on demand. Winora's installer
-does not contain or link its GPLv3 code. Winora's own licensing has not yet been
-selected.
+does not contain or link its GPLv3 code. Optional tiling similarly downloads and
+runs the unmodified GlazeWM engine as a separate process. Winora's own licensing
+has not yet been selected.

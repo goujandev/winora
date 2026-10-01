@@ -27,6 +27,8 @@ try
 {
     Check(Settings.Load(temporary) == new UserSettings() && Settings.Load(temporary).StartWinoraWithWindows,
         "Missing preferences enable app startup by default");
+    Check(!Settings.Load(temporary).TilingEnabled && Settings.Load(temporary).TilingGap == 8,
+        "Automatic tiling is opt-in and uses a restrained default gap");
     File.WriteAllText(temporary, "{broken");
     Check(Settings.Load(temporary) == new UserSettings(), "Corrupt preferences use Windows defaults");
     File.WriteAllText(temporary, "{\"Mode\":\"FutureMode\"}");
@@ -47,11 +49,25 @@ try
     File.WriteAllText(temporary, "{\"Mode\":\"Acrylic\",\"StartWithWindows\":true,\"StartWinoraWithWindows\":false,\"AlwaysShowTrayIcons\":true}");
     Check(!Settings.Load(temporary).StartWinoraWithWindows && Settings.Load(temporary).AlwaysShowTrayIcons,
         "A saved app startup opt-out takes precedence over legacy taskbar startup");
+    Check(!Settings.Load(temporary).TilingEnabled && Settings.Load(temporary).TilingGap == 8,
+        "Existing installations preserve their desktop by leaving the new tiling feature off");
+    var tilingPreferences = new UserSettings(Mode: TaskbarMode.Acrylic, AlwaysShowTrayIcons: true,
+        DarkMode: true, StartWinoraWithWindows: false, TilingEnabled: true, TilingGap: 20);
+    Settings.Save(tilingPreferences, temporary);
+    Check(Settings.Load(temporary) == tilingPreferences,
+        "Tiling enablement and gap survive reload without changing existing preferences");
+    File.WriteAllText(temporary, "{\"Mode\":\"Acrylic\",\"AlwaysShowTrayIcons\":true,\"DarkMode\":true,\"StartWinoraWithWindows\":false,\"TilingEnabled\":true,\"TilingGap\":-100}");
+    Check(Settings.Load(temporary) == (tilingPreferences with { TilingGap = 0 }),
+        "An invalid negative tiling gap is clamped while every other preference is retained");
+    File.WriteAllText(temporary, "{\"Mode\":\"Acrylic\",\"AlwaysShowTrayIcons\":true,\"DarkMode\":true,\"StartWinoraWithWindows\":false,\"TilingEnabled\":true,\"TilingGap\":100}");
+    Check(Settings.Load(temporary) == (tilingPreferences with { TilingGap = 32 }),
+        "An excessive tiling gap is clamped without discarding existing feature preferences");
 }
 finally { if (File.Exists(temporary)) File.Delete(temporary); }
 
 await ImmediateChangeChecks.Run(Check);
 await StartupChecks.Run(Check);
+TilingChecks.Run(Check);
 
 // Opt-in integration check changes the taskbar temporarily and restores it in finally.
 if (args.Length == 2 && args[0] == "--engine")

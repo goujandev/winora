@@ -17,6 +17,7 @@ internal static class DevChecks
         void Check(bool value, string name) { Console.WriteLine($"{(value ? "PASS" : "FAIL")} {name}"); if (!value) failures++; }
         if (!AppBuild.IsDevelopment) throw new InvalidOperationException("Refusing to exercise a production build.");
         Check(AppBuild.Name == "Winora Dev" && AppBuild.InstanceMutex != @"Local\Winora.Settings", "Dev identity and instance mutex are distinct");
+        Check(!AppBuild.AllowTilingEffects, "Normal Dev does not opt in to managing desktop windows");
         Check(Settings.DirectoryPath.EndsWith("WinoraDev") && !Settings.DirectoryPath.EndsWith("\\Winora"), "Dev data directory is isolated");
         var productionPreferences = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Winora", "preferences.json");
         byte[]? ReadProductionPreferences() => File.Exists(productionPreferences) ? File.ReadAllBytes(productionPreferences) : null;
@@ -29,6 +30,10 @@ internal static class DevChecks
         var preferenceBefore = File.Exists(Settings.FilePath) ? File.ReadAllBytes(Settings.FilePath) : null;
         var configPath = Path.Combine(TaskbarService.EngineDirectory, "settings.json");
         var configBefore = File.Exists(configPath) ? File.ReadAllBytes(configPath) : null;
+        var tilingConfigPath = Path.Combine(Settings.DirectoryPath, "tiling", "config.yaml");
+        var tilingConfigBefore = File.Exists(tilingConfigPath) ? File.ReadAllBytes(tilingConfigPath) : null;
+        var existingGlazeConfig = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".glzr", "glazewm", "config.yaml");
+        var existingGlazeConfigBefore = File.Exists(existingGlazeConfig) ? File.ReadAllBytes(existingGlazeConfig) : null;
         try
         {
             foreach (var mode in Enum.GetValues<TaskbarMode>()) new TaskbarService().ApplyAsync(mode).GetAwaiter().GetResult();
@@ -36,13 +41,30 @@ internal static class DevChecks
             StartupService.Synchronize(false);
             StartupService.Remove();
             var startupCalls = 0;
-            var startupFailures = FeatureStartup.RestoreAsync(new UserSettings(Mode: TaskbarMode.Acrylic, AlwaysShowTrayIcons: true),
-                _ => { startupCalls++; return Task.CompletedTask; }, () => { startupCalls++; return Task.CompletedTask; }).GetAwaiter().GetResult();
+            var startupFailures = FeatureStartup.RestoreAsync(new UserSettings(Mode: TaskbarMode.Acrylic, AlwaysShowTrayIcons: true, TilingEnabled: true),
+                _ => { startupCalls++; return Task.CompletedTask; }, () => { startupCalls++; return Task.CompletedTask; },
+                _ => { startupCalls++; return Task.CompletedTask; }).GetAwaiter().GetResult();
             Check(startupCalls == 0 && startupFailures.Count == 0, "Dev startup never restores production feature engines");
             TaskbarService.StopAsync().GetAwaiter().GetResult();
             new TrayIconService().EnableAsync().GetAwaiter().GetResult();
             TrayIconService.DisableAsync().GetAwaiter().GetResult();
-            var devPreferences = new UserSettings(Mode: TaskbarMode.Acrylic, AlwaysShowTrayIcons: true, StartWinoraWithWindows: false);
+            var tiling = new TilingService();
+            var tilingEnginePresent = File.Exists(TilingService.EngineExecutable);
+            var tilingEngineWriteTime = tilingEnginePresent ? File.GetLastWriteTimeUtc(TilingService.EngineExecutable) : (DateTime?)null;
+            var tilingProcessesBefore = GlazeProcessIds();
+            tiling.EnableAsync(12).GetAwaiter().GetResult();
+            tiling.SetGapAsync(20).GetAwaiter().GetResult();
+            tiling.TogglePauseAsync().GetAwaiter().GetResult();
+            tiling.DisableAsync().GetAwaiter().GetResult();
+            Check(File.Exists(tilingConfigPath) && File.ReadAllText(tilingConfigPath) == TilingConfiguration.Build(20)
+                && !tiling.IsRunning,
+                "Normal Dev can preview and stage gap changes without running a tiling engine");
+            Check(File.Exists(TilingService.EngineExecutable) == tilingEnginePresent
+                && (!tilingEnginePresent || File.GetLastWriteTimeUtc(TilingService.EngineExecutable) == tilingEngineWriteTime)
+                && tilingProcessesBefore.SequenceEqual(GlazeProcessIds()),
+                "Normal Dev neither downloads the tiling engine nor starts or stops any GlazeWM process");
+            var devPreferences = new UserSettings(Mode: TaskbarMode.Acrylic, AlwaysShowTrayIcons: true,
+                StartWinoraWithWindows: false, TilingEnabled: true, TilingGap: 12);
             Settings.Save(devPreferences);
             Check(Settings.Load() == devPreferences, "Dev preferences persist independently");
             var startupPreferences = File.ReadAllBytes(Settings.FilePath);
@@ -93,6 +115,8 @@ internal static class DevChecks
             ((CheckBox)window.FindName("StartupCheckBox")).IsChecked = false;
             ((CheckBox)window.FindName("TrayIconsCheckBox")).IsChecked = true;
             ((CheckBox)window.FindName("DarkModeCheckBox")).IsChecked = true;
+            ((CheckBox)window.FindName("TilingEnabledCheckBox")).IsChecked = true;
+            ((Slider)window.FindName("TilingGapSlider")).Value = 24;
             Check(previewPreferences.SequenceEqual(File.ReadAllBytes(Settings.FilePath)), "Offscreen preview interactions never save preferences");
 
             var liveWindow = new MainWindow();
@@ -113,9 +137,70 @@ internal static class DevChecks
                 && ((FrameworkElement)liveWindow.FindName("TrayPreviewOverflow")).Visibility == Visibility.Visible
                 && ((FrameworkElement)liveWindow.FindName("TrayPreviewApps")).Visibility == Visibility.Collapsed,
                 "Tray preference and functional preview update immediately");
+            ((RadioButton)liveWindow.FindName("TilingNavigation")).IsChecked = true;
+            Check(((FrameworkElement)liveWindow.FindName("TilingPage")).Visibility == Visibility.Visible
+                && ((FrameworkElement)liveWindow.FindName("TaskbarPage")).Visibility == Visibility.Collapsed
+                && ((FrameworkElement)liveWindow.FindName("SettingsPage")).Visibility == Visibility.Collapsed,
+                "Tiling has a separate sidebar section without displacing app settings or taskbar controls");
+            var tilingToggle = (CheckBox)liveWindow.FindName("TilingEnabledCheckBox");
+            var tilingGap = (Slider)liveWindow.FindName("TilingGapSlider");
+            Check(tilingToggle.IsChecked == true && tilingGap.Value == 12,
+                "Opening the tiling section restores its saved enablement and gap");
+            liveWindow.Dispatcher.BeginInvoke(new Action(() => tilingToggle.IsChecked = false));
+            Check(PumpUntil(() => !Settings.Load().TilingEnabled)
+                && Settings.Load().Mode == TaskbarMode.Acrylic && Settings.Load().StartWinoraWithWindows,
+                "Disabling tiling saves immediately and preserves taskbar and global startup choices");
+            var tilingRetry = (Button)liveWindow.FindName("RetryTilingButton");
+            var tilingStatus = (TextBlock)liveWindow.FindName("TilingStatusLabel");
+            var temporaryPreferences = Settings.FilePath + ".tmp";
+            var temporaryPreferencesBefore = File.Exists(temporaryPreferences) ? File.ReadAllBytes(temporaryPreferences) : null;
+            try
+            {
+                // Fail only persistence after the preview service succeeds. The
+                // retry must retain the requested ON state through UI rollback.
+                using (var lockedPreferences = new FileStream(temporaryPreferences, FileMode.OpenOrCreate,
+                    FileAccess.ReadWrite, FileShare.None))
+                {
+                    liveWindow.Dispatcher.BeginInvoke(new Action(() => tilingToggle.IsChecked = true));
+                    Check(PumpUntil(() => tilingRetry.Visibility == Visibility.Visible && tilingRetry.IsEnabled
+                        && tilingToggle.IsEnabled && tilingToggle.IsChecked == false
+                        && !Settings.Load().TilingEnabled && tilingStatus.Text.Contains("Couldn’t change tiling")),
+                        "A failed tiling save rolls the toggle back and exposes a usable Retry action");
+                }
+                liveWindow.Dispatcher.BeginInvoke(new Action(() =>
+                    tilingRetry.RaiseEvent(new RoutedEventArgs(Button.ClickEvent, tilingRetry))));
+                Check(PumpUntil(() => tilingToggle.IsChecked == true && tilingToggle.IsEnabled
+                    && Settings.Load().TilingEnabled && tilingRetry.Visibility == Visibility.Collapsed),
+                    "Retry reapplies the failed enable request instead of the saved disabled state");
+            }
+            finally { Restore(temporaryPreferences, temporaryPreferencesBefore); }
+            var tilingPause = (Button)liveWindow.FindName("TilingPauseButton");
+            var tilingRetile = (Button)liveWindow.FindName("TilingRetileButton");
+            liveWindow.Dispatcher.BeginInvoke(new Action(() =>
+                tilingPause.RaiseEvent(new RoutedEventArgs(Button.ClickEvent, tilingPause))));
+            Check(PumpUntil(() => Equals(tilingPause.Content, "Resume") && tilingPause.IsEnabled)
+                && System.Windows.Automation.AutomationProperties.GetName(tilingPause) == "Resume automatic tiling"
+                && !tilingRetile.IsEnabled,
+                "Pausing exposes an accessible Resume action and disables Retile until resumed");
+            liveWindow.Dispatcher.BeginInvoke(new Action(() =>
+                tilingPause.RaiseEvent(new RoutedEventArgs(Button.ClickEvent, tilingPause))));
+            Check(PumpUntil(() => Equals(tilingPause.Content, "Pause") && tilingPause.IsEnabled)
+                && System.Windows.Automation.AutomationProperties.GetName(tilingPause) == "Pause automatic tiling"
+                && tilingRetile.IsEnabled,
+                "Resuming restores both the accessible Pause action and Retile");
+            var gapBefore = ((Border)liveWindow.FindName("TilingPreviewPrimary")).Margin.Right;
+            var existingPreferences = Settings.Load();
+            liveWindow.Dispatcher.BeginInvoke(new Action(() => tilingGap.Value = 24));
+            Check(PumpUntil(() => Settings.Load().TilingGap == 24)
+                && ((Border)liveWindow.FindName("TilingPreviewPrimary")).Margin.Right > gapBefore
+                && Settings.Load() == (existingPreferences with { TilingGap = 24 }),
+                "Changing the tiling gap updates both the preview spacing and only its saved setting");
+            Check(!new TilingService().IsRunning,
+                "Normal Dev tiling interactions never start a real window-management engine");
             ((RadioButton)liveWindow.FindName("SettingsNavigation")).IsChecked = true;
             Check(((FrameworkElement)liveWindow.FindName("SettingsPage")).Visibility == Visibility.Visible
-                && ((FrameworkElement)liveWindow.FindName("TaskbarPage")).Visibility == Visibility.Collapsed,
+                && ((FrameworkElement)liveWindow.FindName("TaskbarPage")).Visibility == Visibility.Collapsed
+                && ((FrameworkElement)liveWindow.FindName("TilingPage")).Visibility == Visibility.Collapsed,
                 "Settings navigation opens the app settings view separately from Taskbar");
             var startupToggle = (CheckBox)liveWindow.FindName("StartupCheckBox");
             Check(IsWithin(startupToggle, (DependencyObject)liveWindow.FindName("SettingsPage"))
@@ -153,17 +238,20 @@ internal static class DevChecks
                 "Changing the app theme leaves the Windows theme unchanged");
             ((RadioButton)liveWindow.FindName("TaskbarNavigation")).IsChecked = true;
             Check(((FrameworkElement)liveWindow.FindName("TaskbarPage")).Visibility == Visibility.Visible
-                && ((FrameworkElement)liveWindow.FindName("SettingsPage")).Visibility == Visibility.Collapsed,
+                && ((FrameworkElement)liveWindow.FindName("SettingsPage")).Visibility == Visibility.Collapsed
+                && ((FrameworkElement)liveWindow.FindName("TilingPage")).Visibility == Visibility.Collapsed,
                 "Taskbar navigation returns to the existing controls");
             Check(JsonSerializer.Serialize(before) == JsonSerializer.Serialize(ReadProductionPreferences())
                 && startupBefore == RegistrySnapshot(@"Software\Microsoft\Windows\CurrentVersion\Run")
-                && trayPreferenceBefore == RegistrySnapshot(@"Software\Winora\TrayIcons\Preference"),
-                "Immediate dev UI changes leave production data and Windows startup/tray preferences unchanged");
+                && trayPreferenceBefore == RegistrySnapshot(@"Software\Winora\TrayIcons\Preference")
+                && JsonSerializer.Serialize(existingGlazeConfigBefore) == JsonSerializer.Serialize(File.Exists(existingGlazeConfig) ? File.ReadAllBytes(existingGlazeConfig) : null),
+                "Immediate dev UI changes leave production data, Windows preferences and existing GlazeWM configuration unchanged");
         }
         finally
         {
             Restore(Settings.FilePath, preferenceBefore);
             Restore(configPath, configBefore);
+            Restore(tilingConfigPath, tilingConfigBefore);
         }
         return failures == 0 ? 0 : 1;
     }
@@ -171,6 +259,13 @@ internal static class DevChecks
     {
         using var key = Registry.CurrentUser.OpenSubKey(path);
         return JsonSerializer.Serialize(key?.GetValueNames().Order().ToDictionary(name => name, name => key.GetValue(name)));
+    }
+    private static int[] GlazeProcessIds()
+    {
+        var ids = new List<int>();
+        foreach (var process in Process.GetProcessesByName("glazewm"))
+            using (process) ids.Add(process.Id);
+        return ids.Order().ToArray();
     }
     private static bool IsWithin(DependencyObject child, DependencyObject ancestor)
     {

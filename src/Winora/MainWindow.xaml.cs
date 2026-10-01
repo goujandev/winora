@@ -42,6 +42,12 @@ public partial class MainWindow : Window
         Title = AppBuild.Name;
         AppNameLabel.Text = AppBuild.Name;
         DevBadge.Visibility = AppBuild.IsDevelopment ? Visibility.Visible : Visibility.Collapsed;
+        if (AppBuild.IsTilingTest)
+        {
+            Title = "Winora Dev · Tiling test";
+            ((TextBlock)DevBadge.Child).Text = "LIVE TILING TEST";
+            DevBadge.ToolTip = "Tiling can move desktop windows. Preferences remain in Winora Dev; other effects are previews.";
+        }
         VersionLabel.Text = $"v{Assembly.GetExecutingAssembly().GetName().Version?.ToString(3)}";
         var settings = previewOnly ? new UserSettings(TaskbarMode.Transparent) : Settings.Load();
         AppTheme.Apply(settings.DarkMode);
@@ -84,13 +90,14 @@ public partial class MainWindow : Window
         SelectPreference(changes.Committed);
         TrayIconsCheckBox.IsChecked = settings.AlwaysShowTrayIcons;
         UpdateTrayPreview();
+        InitializeTiling(settings);
         initializing = false;
         RefreshInteractionState();
         trayHealthTimer.Tick += (_, _) =>
         {
             if (!busyTray && !AppBuild.IsDevelopment && Settings.Load().AlwaysShowTrayIcons) ShowTrayStatus(TrayIconService.GetStatus());
         };
-        Closed += (_, _) => trayHealthTimer.Stop();
+        Closed += (_, _) => { trayHealthTimer.Stop(); tilingHealthTimer.Stop(); };
     }
 
     protected override void OnSourceInitialized(EventArgs e)
@@ -109,10 +116,18 @@ public partial class MainWindow : Window
     }
     private void OnSectionChanged(object sender, RoutedEventArgs e)
     {
-        if (TaskbarPage is null || SettingsPage is null) return;
+        if (TaskbarPage is null || SettingsPage is null || TilingPage is null) return;
         var settings = SettingsNavigation.IsChecked == true;
-        TaskbarPage.Visibility = settings ? Visibility.Collapsed : Visibility.Visible;
+        var tiling = TilingNavigation.IsChecked == true;
+        TaskbarPage.Visibility = settings || tiling ? Visibility.Collapsed : Visibility.Visible;
         SettingsPage.Visibility = settings ? Visibility.Visible : Visibility.Collapsed;
+        TilingPage.Visibility = tiling ? Visibility.Visible : Visibility.Collapsed;
+        if (EngineLink is not null)
+        {
+            EngineLink.NavigateUri = new Uri(tiling ? "https://github.com/glzr-io/glazewm" : "https://github.com/TranslucentTB/TranslucentTB");
+            EngineLink.Inlines.Clear();
+            EngineLink.Inlines.Add(new System.Windows.Documents.Run(tiling ? "GlazeWM" : "TranslucentTB"));
+        }
     }
     private void OnDarkModeChanged(object sender, RoutedEventArgs e)
     {
@@ -144,12 +159,16 @@ public partial class MainWindow : Window
         SidebarColumn.Width = new GridLength(compact ? 60 : 164);
         SidebarLabel.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
         SettingsSidebarLabel.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        TilingSidebarLabel.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
         TaskbarNavigation.HorizontalContentAlignment = compact ? HorizontalAlignment.Center : HorizontalAlignment.Left;
         SettingsNavigation.HorizontalContentAlignment = TaskbarNavigation.HorizontalContentAlignment;
+        TilingNavigation.HorizontalContentAlignment = TaskbarNavigation.HorizontalContentAlignment;
         TaskbarNavigation.Padding = new Thickness(compact ? 6 : 12, 9, compact ? 6 : 12, 9);
         SettingsNavigation.Padding = TaskbarNavigation.Padding;
+        TilingNavigation.Padding = TaskbarNavigation.Padding;
         TaskbarWorkspace.Margin = new Thickness(compact ? 20 : 28, 14, compact ? 20 : 28, 12);
         SettingsWorkspace.Margin = TaskbarWorkspace.Margin;
+        TilingWorkspace.Margin = TaskbarWorkspace.Margin;
     }
     private void OnMinimize(object sender, RoutedEventArgs e) => SystemCommands.MinimizeWindow(this);
     private void OnMaximize(object sender, RoutedEventArgs e)
@@ -176,6 +195,7 @@ public partial class MainWindow : Window
             StartupCheckBox.ToolTip = "Preview only. Windows startup is unchanged.";
             UpdateButton.Content = "Local build";
             RefreshInteractionState();
+            await RestoreTilingAsync();
             return;
         }
         busyTray = true;
@@ -207,6 +227,7 @@ public partial class MainWindow : Window
             StatusLabel.Text = changes.Committed.Mode == TaskbarMode.Default ? "" : $"{changes.Committed.Mode} active";
             _ = ClearFinishStatusAsync(++finishStatusGeneration);
         }
+        await RestoreTilingAsync();
         await CheckUpdatesAsync();
     }
 
@@ -319,12 +340,13 @@ public partial class MainWindow : Window
     }
     private void RefreshInteractionState()
     {
-        DefaultMode.IsEnabled = TransparentMode.IsEnabled = AcrylicMode.IsEnabled = !busyTray && !restartingUpdate;
-        StartupCheckBox.IsEnabled = !busyTray && !restartingUpdate;
-        TrayIconsCheckBox.IsEnabled = CanChangeTrayPreference && !busyTray && !changes.IsBusy && !restartingUpdate;
-        UpdateButton.IsEnabled = !AppBuild.IsDevelopment && !busyUpdating && !busyTray && !changes.IsBusy;
+        DefaultMode.IsEnabled = TransparentMode.IsEnabled = AcrylicMode.IsEnabled = !busyTray && !busyTiling && !restartingUpdate;
+        StartupCheckBox.IsEnabled = !busyTray && !busyTiling && !restartingUpdate;
+        TrayIconsCheckBox.IsEnabled = CanChangeTrayPreference && !busyTray && !busyTiling && !changes.IsBusy && !restartingUpdate;
+        UpdateButton.IsEnabled = !AppBuild.IsDevelopment && !busyUpdating && !busyTray && !busyTiling && !changes.IsBusy;
         RetryButton.IsEnabled = !busyTray && !changes.IsBusy && !restartingUpdate;
         DarkModeCheckBox.IsEnabled = !restartingUpdate;
+        RefreshTilingInteractionState();
     }
     private void ShowTrayStatus(string text, bool transient = false)
     {
@@ -363,13 +385,18 @@ public partial class MainWindow : Window
     }
     private async void OnCheckUpdates(object sender, RoutedEventArgs e)
     {
-        if (changes.IsBusy || busyTray || AppBuild.IsDevelopment) return;
+        if (changes.IsBusy || busyTray || busyTiling || AppBuild.IsDevelopment) return;
         if (updates.PendingUpdate is not null)
         {
             busyUpdating = true;
             restartingUpdate = true;
             RefreshInteractionState();
-            try { await taskbar.PrepareForUpdateAsync(); updates.ApplyAndRestart(); }
+            try
+            {
+                await tiling.DisableAsync();
+                await taskbar.PrepareForUpdateAsync();
+                updates.ApplyAndRestart();
+            }
             catch (Exception error) { Trace.WriteLine(error); ShowUpdateStatus("Couldn’t update. Retry."); }
             finally { busyUpdating = false; restartingUpdate = false; RefreshInteractionState(); }
             return;

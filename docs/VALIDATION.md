@@ -2,6 +2,32 @@
 
 Development PC: Windows 11 25H2, build 26200.9457, x64.
 
+## Experimental tiling (development branch)
+
+- Release and Development builds compile without warnings or errors.
+- Production configuration checks cover opt-in migration, gap persistence and
+  bounds, independent feature restoration through the existing global startup
+  preference, and monitor-bound workspace configuration.
+- A bounded live test used the actual Winora Dev child launcher, verified engine
+  download/extraction, and exercised the real service IPC against two disposable
+  resizable WPF windows. All other application windows were excluded explicitly;
+  test shortcuts were disabled.
+- On this three-monitor desktop, both fixtures physically tiled. Pause, resume,
+  rearrange, and disable passed. Disable restored the exact original rectangles,
+  and both the engine and its recovery watcher exited. Test configuration,
+  snapshots, and log contents were restored afterward.
+- Normal Dev isolation checks cover the new page and immediate preference/gap
+  changes without launching the engine or changing production data, existing
+  GlazeWM configuration, Windows startup, tray state, or Windows theme.
+- Offscreen Tiling views were inspected in light, dark, and narrow layouts.
+
+This first version still needs hands-on checks with the user's everyday apps,
+keyboard shortcuts, elevated windows, monitor changes, and sleep/resume before
+a production release. The upstream diagnostic error log is shared; see
+[tiling limitations](TILING.md).
+
+## Earlier taskbar and release verification
+
 - Build succeeded with zero warnings and zero errors.
 - Eleven checks passed for native taskbar modes, consistent appearance across
   taskbar states, invalid modes, missing/corrupt preferences, and persistence.

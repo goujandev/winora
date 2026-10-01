@@ -1,7 +1,7 @@
 # Interface direction
 
 The workspace centers on a live taskbar preview, three finish choices, and one
-setting rows. A compact sidebar currently contains Taskbar and provides space for
+setting row. A compact sidebar contains Taskbar and Tiling, with space for
 future customization sections. Settings is anchored at its bottom and currently
 contains Dark mode and the global Start Winora with Windows toggle. The sidebar collapses to an icon rail in narrow windows,
 while the Taskbar workspace scrolls independently. The version and updater stay
@@ -56,9 +56,13 @@ window controls and actions have visible keyboard focus. Status announcements ar
 polite. Hover and preview transitions honor Windows client-area animation settings.
 The isolated Development configuration preserves its existing no-Windows-changes
 behavior; use `dev.cmd` to inspect the design before publishing a release.
+The optional `dev.cmd -TestTiling` mode labels the header **LIVE TILING TEST**
+and permits real tiling only. Its settings remain isolated; closing it stops
+its engine. Tiling uses the same palette, compact controls, spacing preview,
+and inline status treatment as the existing pages.
 
 Offscreen visual checks use `Winora.Dev.exe --render-preview <path> <finish>
 <width> <height>`, with optional `--tray`, `--checking`, `--error`, `--dark`, or
-`--settings` scenarios.
+`--settings`, `--tiling`, or `--tiling-enabled` scenarios.
 They never save preferences or run Windows effects. Normal, narrow, loading,
 error, and tray-enabled previews were inspected during this redesign.

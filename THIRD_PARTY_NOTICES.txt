@@ -10,6 +10,14 @@ Licence: https://github.com/TranslucentTB/TranslucentTB/blob/2026.2/LICENSE.md
 TranslucentTB is distributed by its authors under GPLv3.
 The engine retains its upstream name, signature, and independent tray menu.
 
+Optional window tiling uses the separate, unmodified GlazeWM 3.10.1 executable.
+It is downloaded directly from the official glzr-io/glazewm release on first use.
+Winora's installer does not contain or link GlazeWM code. GlazeWM retains its
+upstream identity and signature; Winora supplies its own configuration.
+Project and corresponding source: https://github.com/glzr-io/glazewm/tree/v3.10.1
+Licence: https://github.com/glzr-io/glazewm/blob/v3.10.1/LICENSE.md
+GlazeWM is distributed by its authors under GPLv3.
+
 Missing Microsoft UI and VC framework packages are downloaded directly from
 Microsoft's official NuGet packages or microsoft/winget-cli GitHub releases.
 They are installed as signed per-user Windows framework packages.

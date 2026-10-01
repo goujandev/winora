@@ -8,7 +8,7 @@ namespace Winora;
 public enum TaskbarMode { Default, Transparent, Acrylic }
 
 public sealed record UserSettings(TaskbarMode Mode = TaskbarMode.Default, bool AlwaysShowTrayIcons = false,
-    bool DarkMode = false, bool StartWinoraWithWindows = true);
+    bool DarkMode = false, bool StartWinoraWithWindows = true, bool TilingEnabled = false, int TilingGap = 8);
 
 public static class Settings
 {
@@ -21,7 +21,7 @@ public static class Settings
         try
         {
             var settings = JsonSerializer.Deserialize<UserSettings>(File.ReadAllText(path ?? FilePath));
-            return settings is not null && Enum.IsDefined(settings.Mode) ? settings : new();
+            return settings is not null && Enum.IsDefined(settings.Mode) ? Normalize(settings) : new();
         }
         catch (Exception error) when (error is IOException or JsonException or UnauthorizedAccessException)
         {
@@ -34,7 +34,12 @@ public static class Settings
         path ??= FilePath;
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         var temporary = path + ".tmp";
-        File.WriteAllText(temporary, JsonSerializer.Serialize(settings));
+        File.WriteAllText(temporary, JsonSerializer.Serialize(Normalize(settings)));
         File.Move(temporary, path, overwrite: true);
     }
+
+    private static UserSettings Normalize(UserSettings settings) => settings with
+    {
+        TilingGap = Math.Clamp(settings.TilingGap, TilingConfiguration.MinimumGap, TilingConfiguration.MaximumGap)
+    };
 }

@@ -65,5 +65,42 @@ internal static class StartupChecks
             _ => Task.FromException(taskbarError), () => Task.FromException(trayError));
         check(failures.Count == 2 && failures[0].InnerException == taskbarError && failures[1].InnerException == trayError,
             "Independent startup failures are both reported for logging");
+
+        calls.Clear();
+        Task EnableTiling(int gap) { calls.Add($"tiling:{gap}"); return Task.CompletedTask; }
+        var allFeatures = enabledFeatures with { TilingEnabled = true, TilingGap = 16 };
+        failures = await FeatureStartup.RestoreAsync(allFeatures with { StartWinoraWithWindows = false },
+            ApplyTaskbar, EnableTray, EnableTiling);
+        check(calls.Count == 0 && failures.Count == 0,
+            "Global startup opt-out also prevents automatic tiling from starting");
+
+        failures = await FeatureStartup.RestoreAsync(allFeatures, ApplyTaskbar, EnableTray, EnableTiling);
+        check(calls.SequenceEqual(new[] { "taskbar:Acrylic", "tray", "tiling:16" }) && failures.Count == 0,
+            "The existing global startup restores tiling with its saved gap alongside other enabled features");
+
+        calls.Clear();
+        failures = await FeatureStartup.RestoreAsync(new UserSettings(TilingEnabled: true, TilingGap: 0),
+            ApplyTaskbar, EnableTray, EnableTiling);
+        check(calls.SequenceEqual(new[] { "tiling:0" }) && failures.Count == 0,
+            "Tiling starts independently when taskbar and tray features use Windows defaults");
+
+        calls.Clear();
+        failures = await FeatureStartup.RestoreAsync(allFeatures,
+            _ => Task.FromException(taskbarError), () => Task.FromException(trayError), EnableTiling);
+        check(calls.SequenceEqual(new[] { "tiling:16" }) && failures.Count == 2,
+            "Taskbar and tray startup failures cannot prevent the tiling engine from restoring");
+
+        calls.Clear();
+        var tilingError = new IOException("Tiling fixture failure");
+        failures = await FeatureStartup.RestoreAsync(allFeatures, ApplyTaskbar, EnableTray,
+            _ => Task.FromException(tilingError));
+        check(calls.SequenceEqual(new[] { "taskbar:Acrylic", "tray" }) && failures.Count == 1
+            && failures[0].InnerException == tilingError,
+            "A tiling startup failure is reported without disabling successfully restored features");
+
+        failures = await FeatureStartup.RestoreAsync(allFeatures,
+            _ => Task.FromException(taskbarError), () => Task.FromException(trayError), _ => Task.FromException(tilingError));
+        check(failures.Count == 3 && failures.Any(error => error.InnerException == tilingError),
+            "All startup errors remain available for logging when every enabled feature fails");
     }
 }

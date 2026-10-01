@@ -2,6 +2,13 @@ namespace Winora;
 
 public static class AppBuild
 {
+    public static bool IsTilingTest { get; private set; }
+    public static bool AllowTilingEffects => !IsDevelopment || IsTilingTest;
+    internal static void EnableTilingTest()
+    {
+        if (!IsDevelopment) throw new InvalidOperationException("Tiling test mode is only available in Winora Dev.");
+        IsTilingTest = true;
+    }
     public static bool IsDevelopment
     {
         get

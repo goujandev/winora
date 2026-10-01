@@ -47,13 +47,32 @@ production binaries remain under their existing Debug/Release directories.
 - Dev uses its own single-instance mutex and bypasses all Velopack hooks and
   release feeds, including environment-based update-source overrides.
 - Taskbar finishes, the startup checkbox, and tray automation can be exercised
-  as preview preferences. Selections save immediately to dev files. Dev never downloads or
+  as preview preferences. Selections save immediately to dev files. Ordinary Dev never downloads or
   launches the native engine/helper, changes registry/startup entries, installs
   frameworks, or stops production processes.
 - Windows taskbars and tray visibility are shared per desktop/user. Real effect
   testing cannot be fully isolated on the same desktop. Use a separate Windows
   account or VM for real OS-effect integration tests. The dev app intentionally
   labels its controls as previews instead of pretending it applied an effect.
+
+## Tiling test
+
+The normal dev launcher previews tiling without moving Windows windows. To test
+the real optional engine, use:
+
+```powershell
+.\dev.cmd -TestTiling
+```
+
+The window shows **LIVE TILING TEST** and opens the Tiling page. Turn on
+**Automatically tile windows** to begin. This mode uses Winora Dev preferences
+and engine files, and keeps taskbar effects, tray changes, startup registration,
+and production updates disabled. Window arrangement is shared with your desktop,
+so real tiling necessarily moves your open application windows. Closing the test
+window stops its tiling engine. An existing independently running window manager
+must be stopped before testing. The upstream engine's diagnostic error log is
+shared at `%UserProfile%\.glzr\glazewm\errors.log`; its existing configuration is
+left alone. Ordinary `dev.cmd` remains the isolated preview.
 
 ## Checks and production releases
 
