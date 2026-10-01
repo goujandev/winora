@@ -12,7 +12,7 @@ public sealed record UserSettings(TaskbarMode Mode = TaskbarMode.Default, bool S
 public static class Settings
 {
     public static readonly string DirectoryPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Winora");
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), AppBuild.DataFolder);
     public static string FilePath => Path.Combine(DirectoryPath, "preferences.json");
 
     public static UserSettings Load(string? path = null)

@@ -14,14 +14,14 @@ public static class Program
     public static int Main(string[] args)
     {
         // Velopack's install/update hooks must run before any app or engine work.
-        VelopackApp.Build().OnBeforeUninstallFastCallback(_ =>
+        if (!AppBuild.IsDevelopment) VelopackApp.Build().OnBeforeUninstallFastCallback(_ =>
         {
             if (Velopack.Locators.VelopackLocator.Current.AppId != "Winora") return;
             TaskbarService.SetStartup(false);
             TaskbarService.StopAsync().GetAwaiter().GetResult();
             TrayIconService.DisableAsync().GetAwaiter().GetResult();
         }).Run();
-        if (args.Length == 0 && Environment.GetEnvironmentVariable("WINORA_STARTUP_PROBE") is { Length: > 0 } probePath)
+        if (!AppBuild.IsDevelopment && args.Length == 0 && Environment.GetEnvironmentVariable("WINORA_STARTUP_PROBE") is { Length: > 0 } probePath)
             args = ["--update-probe", probePath];
         try
         {
@@ -64,7 +64,7 @@ public static class Program
                 encoder.Save(stream);
                 return 0;
             }
-            using var singleInstance = new Mutex(true, @"Local\Winora.Settings", out var firstInstance);
+            using var singleInstance = new Mutex(true, AppBuild.InstanceMutex, out var firstInstance);
             if (!firstInstance) return 0;
             return app.Run(new MainWindow());
         }
@@ -78,7 +78,7 @@ public static class Program
             }
             catch (Exception loggingError) when (loggingError is IOException or UnauthorizedAccessException) { }
             if (!args.Contains("--render-preview") && !args.Contains("--update-probe"))
-                MessageBox.Show(error.Message, "Winora", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(error.Message, AppBuild.Name, MessageBoxButton.OK, MessageBoxImage.Error);
             return 1;
         }
     }

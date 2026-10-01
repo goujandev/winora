@@ -9,6 +9,8 @@ void Check(bool condition, string name)
     Console.WriteLine($"{(condition ? "PASS" : "FAIL")} {name}");
     if (!condition) failures++;
 }
+Check(!AppBuild.IsDevelopment && AppBuild.Name == "Winora" && AppBuild.InstanceMutex == @"Local\Winora.Settings", "Production identity is unchanged");
+Check(Settings.DirectoryPath.EndsWith("\\Winora", StringComparison.OrdinalIgnoreCase), "Production data directory is unchanged");
 foreach (var mode in Enum.GetValues<TaskbarMode>())
 {
     using var config = JsonDocument.Parse(TaskbarService.BuildConfiguration(mode));

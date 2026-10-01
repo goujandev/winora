@@ -21,6 +21,7 @@ public sealed class TrayIconService
     {
         get
         {
+            if (AppBuild.IsDevelopment) return true;
             if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000)) return false;
             try { using var key = Registry.CurrentUser.OpenSubKey(TrayKey); return key is not null; }
             catch (Exception error) when (error is UnauthorizedAccessException or System.Security.SecurityException) { return false; }
@@ -29,6 +30,7 @@ public sealed class TrayIconService
 
     public static string GetStatus()
     {
+        if (AppBuild.IsDevelopment) return "Dev preview only. Windows tray visibility is unchanged.";
         try
         {
             if (!IsSupported) return "Tray automation is unavailable on this Windows configuration.";
@@ -44,6 +46,7 @@ public sealed class TrayIconService
 
     public async Task EnableAsync()
     {
+        if (AppBuild.IsDevelopment) return;
         if (!IsSupported) throw new InvalidOperationException("This Windows configuration does not expose app-tray visibility settings.");
         var source = Path.Combine(AppContext.BaseDirectory, "Winora.TrayAgent.exe");
         if (!File.Exists(source)) throw new FileNotFoundException("The tray helper is missing. Repair or update Winora.");
@@ -85,6 +88,7 @@ public sealed class TrayIconService
 
     public static async Task DisableAsync()
     {
+        if (AppBuild.IsDevelopment) return;
         using (var preference = Registry.CurrentUser.CreateSubKey(PreferenceKey)) preference.SetValue("Enabled", 0, RegistryValueKind.DWord);
         using (var startup = Registry.CurrentUser.OpenSubKey(RunKey, true)) startup?.DeleteValue(StartupName, false);
         using var process = FindAgent();

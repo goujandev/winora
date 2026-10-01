@@ -16,12 +16,18 @@ public sealed class TaskbarService
     private const string StartupName = "Winora.Taskbar";
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
-    public bool IsRunning { get { using var process = FindOwnedProcess(); return process is not null; } }
+    public bool IsRunning { get { if (AppBuild.IsDevelopment) return false; using var process = FindOwnedProcess(); return process is not null; } }
     public string DescribeStatus() => IsRunning ? "Your taskbar appearance is active." : "Ready. Choose an appearance and apply it.";
 
     public async Task ApplyAsync(TaskbarMode mode, bool startWithWindows = false, IProgress<string>? progress = null)
     {
         if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
+        if (AppBuild.IsDevelopment)
+        {
+            Directory.CreateDirectory(EngineDirectory);
+            await File.WriteAllTextAsync(Path.Combine(EngineDirectory, "settings.json"), BuildConfiguration(mode));
+            return;
+        }
         ThrowIfForeignEngineRunning();
         if (mode == TaskbarMode.Default) { await StopAsync(); SetStartup(false); return; }
         progress?.Report("Preparing the taskbar engine…");
@@ -79,6 +85,7 @@ public sealed class TaskbarService
     public Task PrepareForUpdateAsync() => StopAsync();
     public static void SetStartup(bool enabled)
     {
+        if (AppBuild.IsDevelopment) return;
         using var key = Registry.CurrentUser.CreateSubKey(RunKey);
         if (enabled) key.SetValue(StartupName, $"\"{EngineExecutable}\"");
         else key.DeleteValue(StartupName, throwOnMissingValue: false);
@@ -86,6 +93,7 @@ public sealed class TaskbarService
 
     public static async Task StopAsync()
     {
+        if (AppBuild.IsDevelopment) return;
         using var process = FindOwnedProcess();
         if (process is null) return;
         var posted = false;

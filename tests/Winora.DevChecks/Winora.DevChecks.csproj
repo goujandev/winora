@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+ <PropertyGroup>
+  <OutputType>Exe</OutputType>
+  <TargetFramework>net10.0-windows</TargetFramework>
+  <UseWPF>true</UseWPF>
+ </PropertyGroup>
+ <ItemGroup><ProjectReference Include="../../src/Winora/Winora.csproj" /></ItemGroup>
+ <Target Name="RequireDevelopment" BeforeTargets="PrepareForBuild" Condition="'$(Configuration)' != 'Development'">
+  <Error Text="Run dev isolation checks with -c Development." />
+ </Target>
+</Project>

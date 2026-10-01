@@ -52,6 +52,9 @@ public partial class MainWindow : Window
     {
         this.previewOnly = previewOnly;
         InitializeComponent();
+        Title = AppBuild.Name;
+        AppNameLabel.Text = AppBuild.Name;
+        DevBadge.Visibility = AppBuild.IsDevelopment ? Visibility.Visible : Visibility.Collapsed;
         VersionLabel.Text = $"v{Assembly.GetExecutingAssembly().GetName().Version?.ToString(3)}";
         selectedMode = previewOnly ? TaskbarMode.Transparent : Settings.Load().Mode;
         StartupCheckBox.IsChecked = !previewOnly && Settings.Load().StartWithWindows;
@@ -73,6 +76,14 @@ public partial class MainWindow : Window
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         if (previewOnly) return;
+        if (AppBuild.IsDevelopment)
+        {
+            StatusLabel.Text = "Dev preview. Apply saves dev preferences only.";
+            TrayIconsCheckBox.ToolTip = "Dev preview: saves this preference without changing Windows or starting a helper.";
+            UpdateButton.Content = "Local development";
+            UpdateButton.IsEnabled = false;
+            return;
+        }
         TrayIconsCheckBox.IsEnabled = CanChangeTrayPreference;
         if (!TrayIconService.IsSupported) ShowTrayStatus("Tray automation is unavailable on this Windows configuration.");
         else if (Settings.Load().AlwaysShowTrayIcons)
@@ -133,7 +144,7 @@ public partial class MainWindow : Window
             await taskbar.ApplyAsync(mode, startup, new Progress<string>(text => StatusLabel.Text = text));
             Settings.Save(Settings.Load() with { Mode = mode, StartWithWindows = startup });
             if (mode == TaskbarMode.Default) StartupCheckBox.IsChecked = false;
-            StatusLabel.Text = mode == TaskbarMode.Default
+            StatusLabel.Text = AppBuild.IsDevelopment ? "Dev preferences saved. Windows is unchanged." : mode == TaskbarMode.Default
                 ? "Windows default restored."
                 : $"{mode} applied. You can close this window.";
         }
@@ -141,7 +152,7 @@ public partial class MainWindow : Window
         {
             StatusLabel.Text = $"Couldn’t apply this appearance: {error.Message}";
         }
-        finally { busyApplying = false; ApplyButton.IsEnabled = !busyTray; UpdateButton.IsEnabled = !busyUpdating && !busyTray; TrayIconsCheckBox.IsEnabled = CanChangeTrayPreference && !busyTray; }
+        finally { busyApplying = false; ApplyButton.IsEnabled = !busyTray; UpdateButton.IsEnabled = !AppBuild.IsDevelopment && !busyUpdating && !busyTray; TrayIconsCheckBox.IsEnabled = CanChangeTrayPreference && !busyTray; }
     }
 
     private void ShowTrayStatus(string text)
@@ -165,7 +176,7 @@ public partial class MainWindow : Window
             if (enabled) await trayIcons.EnableAsync();
             else await TrayIconService.DisableAsync();
             Settings.Save(Settings.Load() with { AlwaysShowTrayIcons = enabled });
-            ShowTrayStatus(enabled ? "" : "Automation off. Icon visibility can be changed in Windows Settings.");
+            ShowTrayStatus(AppBuild.IsDevelopment ? "Dev preference saved. Windows tray visibility is unchanged." : enabled ? "" : "Automation off. Icon visibility can be changed in Windows Settings.");
         }
         catch (Exception error)
         {
@@ -180,7 +191,7 @@ public partial class MainWindow : Window
             busyTray = false;
             TrayIconsCheckBox.IsEnabled = CanChangeTrayPreference && !busyApplying;
             ApplyButton.IsEnabled = !busyApplying;
-            UpdateButton.IsEnabled = !busyUpdating && !busyApplying;
+            UpdateButton.IsEnabled = !AppBuild.IsDevelopment && !busyUpdating && !busyApplying;
         }
     }
 

@@ -88,6 +88,11 @@ directory to prevent stale binaries from an earlier build entering a release.
 
 ## Publish updates
 
+For fast, isolated local UI testing, see [Winora Dev](docs/DEVELOPMENT.md). Launch
+it with `.\dev.cmd` (or double-click `dev.cmd` in Explorer).
+It uses separate preferences and previews changes without modifying Windows or
+the installed production app. No release is needed.
+
 The GitHub Actions workflow builds and checks changes to main and pull
 requests. A tag such as `v0.1.1` runs the installed-update test and publishes
 the installer, full update package, and feed JSON as a GitHub Release. Failed

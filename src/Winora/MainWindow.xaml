@@ -13,7 +13,8 @@
   <Grid>
    <StackPanel Orientation="Horizontal" Margin="18,0,0,0" VerticalAlignment="Center">
     <Image Source="{StaticResource WinoraMark}" Width="24" Height="24" Margin="0,0,10,0" />
-    <TextBlock Text="Winora" FontWeight="SemiBold" VerticalAlignment="Center" />
+    <TextBlock x:Name="AppNameLabel" Text="Winora" FontWeight="SemiBold" VerticalAlignment="Center" />
+    <Border x:Name="DevBadge" Visibility="Collapsed" Background="#514324" CornerRadius="4" Padding="8,3" Margin="12,0,0,0"><TextBlock Text="DEV PREVIEW · Windows changes disabled" Foreground="#F2D28A" FontSize="11" /></Border>
    </StackPanel>
    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" shell:WindowChrome.IsHitTestVisibleInChrome="True">
     <Button Style="{StaticResource CaptionButton}" Content="&#xE921;" Click="OnMinimize" AutomationProperties.Name="Minimize" ToolTip="Minimize" />

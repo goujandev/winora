@@ -28,6 +28,7 @@ public static class EngineProvisioner
 
     public static async Task EnsureAsync(IProgress<string>? progress)
     {
+        if (AppBuild.IsDevelopment) throw new InvalidOperationException("Native effects are disabled in Winora Dev.");
         if (System.Runtime.InteropServices.RuntimeInformation.OSArchitecture != System.Runtime.InteropServices.Architecture.X64)
             throw new PlatformNotSupportedException("This prototype supports Windows 11 on x64 PCs.");
         var needs = await RunPowerShellAsync("""

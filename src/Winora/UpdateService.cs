@@ -16,6 +16,7 @@ public sealed class UpdateService
 
     public UpdateService()
     {
+        if (AppBuild.IsDevelopment) return;
         var localSource = Environment.GetEnvironmentVariable("WINORA_UPDATE_SOURCE");
         if (!string.IsNullOrWhiteSpace(localSource))
         {
@@ -32,6 +33,7 @@ public sealed class UpdateService
 
     public async Task<string> CheckAndDownloadAsync()
     {
+        if (AppBuild.IsDevelopment) return "Updates are disabled in Winora Dev.";
         if (manager is null) return "The release feed hasn’t been configured yet.";
         if (!manager.IsInstalled) return "Update checks are available in the installed app.";
         if (PendingUpdate is not null) return "An update is ready. Restart Winora to install it.";

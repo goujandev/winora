@@ -12,11 +12,18 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets/Winora.ico</ApplicationIcon>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <Configurations>Debug;Release;Development</Configurations>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Development'">
+    <AssemblyName>Winora.Dev</AssemblyName>
+    <Product>Winora Dev</Product>
+    <DefineConstants>$(DefineConstants);WINORA_DEV</DefineConstants>
+    <Optimize>false</Optimize>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Velopack" Version="1.2.0" />
-    <Content Include="release.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="release.json" CopyToOutputDirectory="PreserveNewest" Condition="'$(Configuration)' != 'Development'" />
     <Resource Include="Assets/Winora.ico" />
-    <Content Include="../../artifacts/native/Winora.TrayAgent.exe" Link="Winora.TrayAgent.exe" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Condition="Exists('../../artifacts/native/Winora.TrayAgent.exe')" />
+    <Content Include="../../artifacts/native/Winora.TrayAgent.exe" Link="Winora.TrayAgent.exe" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Condition="'$(Configuration)' != 'Development' and Exists('../../artifacts/native/Winora.TrayAgent.exe')" />
   </ItemGroup>
 </Project>
