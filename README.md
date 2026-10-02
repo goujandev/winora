@@ -64,7 +64,7 @@ before Winora enables its effects. ARM64 is not supported in this prototype.
 
 ## Build
 
-Version 0.1.7 includes optional, experimental automatic window tiling. Enable it
+Version 0.1.8 includes optional, experimental automatic window tiling. Enable it
 on the **Tiling** page. New windows go to the least crowded available monitor;
 balanced layouts, native-size checks and fullscreen-game routing run while tiling
 is enabled. It starts off and downloads its verified engine on first use. See

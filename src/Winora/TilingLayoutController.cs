@@ -24,7 +24,8 @@ internal sealed class TilingLayoutController(Func<bool> engineAlive) : IDisposab
     private string refresh = "";
 
     private sealed record WindowState(Guid Id, long Handle, string State, Guid WorkspaceId,
-        string Workspace, string Device, bool Focused, bool Dragging, TilingNativeWindow? Native);
+        string Workspace, string Device, bool Focused, bool Dragging, TilingNativeWindow? Native,
+        bool MaximizedState, bool PreviouslyFloating);
     private sealed record WorkspaceState(Guid MonitorId, Guid Id, string Name, string Device,
         TilingNativeMonitor Monitor, IReadOnlyList<WindowState> Windows, TilingLayoutNode? Template, string EngineFingerprint);
     private sealed record State(bool Paused, IReadOnlyList<WorkspaceState> Workspaces)
@@ -64,6 +65,22 @@ internal sealed class TilingLayoutController(Func<bool> engineAlive) : IDisposab
         }
         initialized = true;
         if (state.Paused || state.Windows.Any(window => window.Dragging || window.Native?.IsMoveSizeActive == true)) return "";
+        var restoredMaximized = false;
+        foreach (var window in state.Windows.Where(window => window.State == "fullscreen" && window.MaximizedState
+            && window.Native is { IsMaximized: true, IsVisible: true, IsMinimized: false, IsCloaked: false }
+            && !fullscreen.Any(full => full.Handle == window.Handle)))
+        {
+            if (!engineAlive() || native.IsAnyMoveSizeActive()) break;
+            if (window.Focused && TilingNativeWindows.ForegroundHandle != window.Handle) continue;
+            if (!native.TryRead(window.Handle, out var current, queryConstraints: false) || !SameIdentity(window, current)
+                || !current.IsMaximized || current.IsMoveSizeActive) continue;
+            // GlazeWM represents ordinary maximise as fullscreen(maximized:true).
+            // Its redraw restores the native window directly into its tile.
+            var command = window.PreviouslyFloating ? "set-floating --centered=false" : "set-tiling";
+            using var restored = await send($"command --id {window.Id:D} {command}");
+            restoredMaximized = true;
+        }
+        if (restoredMaximized) state = await ReadAsync(send);
         var occupied = fullscreen.Select(window => window.MonitorDevice).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var force = ReadRefresh();
         if (force) defaultLayouts.UnionWith(state.Workspaces.Select(workspace => workspace.Id));
@@ -323,11 +340,14 @@ internal sealed class TilingLayoutController(Func<bool> engineAlive) : IDisposab
                     if (node.GetProperty("type").GetString() == "window")
                     {
                         var handle = node.GetProperty("handle").GetInt64();
-                        var state = node.GetProperty("state").GetProperty("type").GetString() ?? "";
+                        var windowState = node.GetProperty("state");
+                        var state = windowState.GetProperty("type").GetString() ?? "";
                         native.TryRead(handle, out var actual, queryConstraints: state == "tiling" || state == "floating");
                         windows.Add(new(Guid.Parse(node.GetProperty("id").GetString()!), handle, state, id, name, device,
                             node.GetProperty("hasFocus").GetBoolean(), node.TryGetProperty("activeDrag", out var drag) && drag.ValueKind != JsonValueKind.Null,
-                            actual));
+                            actual, windowState.TryGetProperty("maximized", out var maximized) && maximized.GetBoolean(),
+                            node.TryGetProperty("prevState", out var previous) && previous.ValueKind == JsonValueKind.Object
+                                && previous.GetProperty("type").GetString() == "floating"));
                     }
                     else if (node.TryGetProperty("children", out var children)) foreach (var child in children.EnumerateArray()) Read(child);
                 }
