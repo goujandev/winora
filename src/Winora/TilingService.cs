@@ -181,6 +181,7 @@ public sealed class TilingService
             using var state = await SendAsync("query paused");
             if (state.RootElement.GetProperty("data").GetBoolean())
                 throw new InvalidOperationException("Resume tiling before rearranging windows.");
+            await File.WriteAllTextAsync(TilingLayoutController.RefreshPath, Guid.NewGuid().ToString("D"));
             using var response = await SendAsync("command wm-redraw");
         }
         finally { Changes.Release(); }
@@ -196,17 +197,12 @@ public sealed class TilingService
             var paused = response.RootElement.GetProperty("data").GetBoolean();
             var message = paused ? "Paused" : "Tiling active";
             var responsive = true;
-            if (Settings.Load().MoveTilesForFullscreenGames)
-            {
-                var routing = FullscreenRoutingWorker.ReadStatus();
-                using var worker = FindRoutingWorker(routing);
-                if (routing?.Error == true) { message += $" · {routing.Message}"; responsive = false; }
-                else if (worker is null || routing is { Stopped: true })
-                { message += " · Fullscreen routing stopped; retry to restart it"; responsive = false; }
-                else if (!paused && !string.IsNullOrWhiteSpace(routing?.Message)) message += $" · {routing.Message}";
-            }
-            else if (FullscreenRoutingWorker.ReadStatus() is { Stopped: true, Error: false, Message.Length: > 0 } finished)
-                message += $" · {finished.Message}";
+            var routing = FullscreenRoutingWorker.ReadStatus();
+            using var worker = FindRoutingWorker(routing);
+            if (routing?.Error == true) { message += $" · {routing.Message}"; responsive = false; }
+            else if (worker is null || routing is { Stopped: true })
+            { message += " · Layout checks stopped; retry to restart them"; responsive = false; }
+            else if (!paused && !string.IsNullOrWhiteSpace(routing?.Message)) message += $" · {routing.Message}";
             return new(true, paused, message, Responsive: responsive);
         }
         catch (Exception error) when (error is InvalidOperationException or WebSocketException or OperationCanceledException or JsonException or Win32Exception)
@@ -276,7 +272,7 @@ public sealed class TilingService
     {
         if (!AppBuild.AllowTilingEffects) return;
         using var engine = FindOwnedProcess();
-        if (engine is null || !Settings.Load().MoveTilesForFullscreenGames)
+        if (engine is null)
         { await StopFullscreenRoutingCoreAsync(throwOnRestoreFailure: true); return; }
         var previous = FullscreenRoutingWorker.ReadStatus();
         using (var existing = FindRoutingWorker(previous))

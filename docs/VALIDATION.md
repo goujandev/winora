@@ -4,6 +4,36 @@ Development PC: Windows 11 25H2, build 26200.9457, x64.
 
 ## Experimental tiling (development branch)
 
+Placement, layout and native-size verification (2026-10-02):
+
+- 135 production checks and 49 isolated Dev checks pass. Release and Development
+  builds compile with zero warnings and errors.
+- All 38 bounded live layout checks pass on two landscape displays and one
+  portrait display. They verify least-load placement including floating apps,
+  primary-monitor ties, retained native focus, the requested one-to-four-window
+  patterns, persistent manual orientation/order, and explicit Rearrange reset.
+- Native self-resizing is repaired within two seconds. Closing apps fills vacant
+  space; ordinary split resizing reflows neighbours, and extreme sizing respects
+  the application's queried native minimum. Pause suppresses both placement and
+  repair; resume reconciles the real frames again.
+- Repeated n-ary reflow checks cover forty passes on both axes without gap drift.
+  Layout plans retain window identities and use an explicit overflow result when
+  minimum sizes cannot fit.
+- The existing 20 live fullscreen-game/custom-window checks also pass, including
+  borderless-game monitor preservation, background evacuation, focus retention,
+  return after game exit and disable restoration.
+- Live fixtures admit only their disposable windows. Production preferences and
+  the pinned engine cache remain unchanged; Dev preferences, configuration,
+  helper journals/status, layout refresh state and log snapshots are restored.
+- The shared headless helper now checks native layouts whenever tiling runs,
+  including with fullscreen-game routing disabled. Ordinary Dev remains a preview.
+- A five-second steady-session sample measured 0.62% of one CPU core, 74.5 MiB
+  working set and 33.6 MiB private memory for the shared helper. This is a local
+  sample, not a performance guarantee across applications and monitor counts.
+- The updated live Dev window was reopened and confirmed physically tiled.
+  Peg Leg was not open during that final check; its self-resize behaviour still
+  needs the user's hands-on check alongside the passing disposable-app regression.
+
 Game placement and application compatibility verification (2026-10-02):
 
 - 107 production checks and 49 isolated Dev checks pass. Release and Development
@@ -30,7 +60,7 @@ Game placement and application compatibility verification (2026-10-02):
   applications, restrictive native size limits and real game mode transitions
   remain part of hands-on beta coverage.
 
-Fullscreen-game routing verification:
+Earlier fullscreen-game routing verification (before the shared layout helper):
 
 - 102 production checks and 44 isolated Dev checks pass, including 31 routing
   policy scenarios and fullscreen preference failure/Retry behavior.

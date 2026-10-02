@@ -76,6 +76,26 @@ must be stopped before testing. The upstream engine's diagnostic error log is
 shared at `%UserProfile%\.glzr\glazewm\errors.log`; its existing configuration is
 left alone. Ordinary `dev.cmd` remains the isolated preview.
 
+For placement and resizing tests, leave fullscreen routing off if desired:
+the same headless helper still checks ordinary layouts on a 250 ms polling loop.
+Open new app windows to verify least-load monitor placement. Visible floating
+apps count, minimized apps do not; ties prefer the primary monitor and then
+Windows display-number order. Fullscreen-occupied monitors are excluded.
+
+On a landscape monitor, one through four tiles should form a full-area tile,
+two equal halves, a left tile with two stacked right tiles, then a 2 × 2 grid.
+Portrait monitors transpose that pattern. Resize a split to check neighbouring
+reflow and native size limits; open or close a tile to rebuild the default layout.
+**Rearrange** resets manual split choices. **Pause** stops layout repairs and
+automatic monitor placement until resumed.
+
+Windows that cannot fit their native limits or repeatedly refuse sizing float
+with an arrangement status. An automatic lack-of-space fallback can recover
+when room becomes available; a user-floated or manually moved/resized window
+stays under user control. Native size queries are bounded, and a 160 × 120 pixel
+safety minimum prevents unusable tiles. Check actual window frames as well as
+the engine state when testing custom-window apps.
+
 To test fullscreen-game routing with at least two monitors:
 
 1. In the live tiling test, enable tiling and leave **Move tiles away from

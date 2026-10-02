@@ -52,13 +52,17 @@ internal static class DevChecks
             var tilingEnginePresent = File.Exists(TilingService.EngineExecutable);
             var tilingEngineWriteTime = tilingEnginePresent ? File.GetLastWriteTimeUtc(TilingService.EngineExecutable) : (DateTime?)null;
             var tilingProcessesBefore = GlazeProcessIds();
+            var previewRules = new UserSettings(FullscreenGameExecutables: [@"C:\Dev checks\Game.Client.exe"],
+                TiledAppExecutables: [@"C:\Dev checks\Custom.App.exe"]);
+            Settings.Save(previewRules);
             tiling.EnableAsync(12).GetAwaiter().GetResult();
             tiling.SetGapAsync(20).GetAwaiter().GetResult();
             tiling.TogglePauseAsync().GetAwaiter().GetResult();
             tiling.DisableAsync().GetAwaiter().GetResult();
-            Check(File.Exists(tilingConfigPath) && File.ReadAllText(tilingConfigPath) == TilingConfiguration.Build(20)
+            Check(File.Exists(tilingConfigPath) && File.ReadAllText(tilingConfigPath) == TilingConfiguration.Build(20,
+                    excludedGameExecutables: previewRules.FullscreenGameExecutables, tiledAppExecutables: previewRules.TiledAppExecutables)
                 && !tiling.IsRunning,
-                "Normal Dev can preview and stage gap changes without running a tiling engine");
+                "Normal Dev stages gap changes while preserving game/app rules without running a tiling engine");
             Check(File.Exists(TilingService.EngineExecutable) == tilingEnginePresent
                 && (!tilingEnginePresent || File.GetLastWriteTimeUtc(TilingService.EngineExecutable) == tilingEngineWriteTime)
                 && tilingProcessesBefore.SequenceEqual(GlazeProcessIds()),

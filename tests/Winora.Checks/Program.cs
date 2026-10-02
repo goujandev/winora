@@ -88,6 +88,7 @@ finally { if (File.Exists(temporary)) File.Delete(temporary); }
 await ImmediateChangeChecks.Run(Check);
 await StartupChecks.Run(Check);
 TilingChecks.Run(Check);
+TilingLayoutChecks.Run(Check);
 FullscreenRoutingChecks.Run(Check);
 
 // Opt-in integration check changes the taskbar temporarily and restores it in finally.

@@ -19,7 +19,7 @@ internal static class FullscreenRoutingWorker
     internal static string StatusPath => Path.Combine(TilingService.DirectoryPath, "fullscreen-routing-status.json");
     internal static string StopPath => Path.Combine(TilingService.DirectoryPath, "fullscreen-routing-stop.json");
     internal static string JournalPath => Path.Combine(TilingService.DirectoryPath, "fullscreen-routing-journal.json");
-    private static readonly TimeSpan Interval = TimeSpan.FromMilliseconds(750);
+    private static readonly TimeSpan Interval = TimeSpan.FromMilliseconds(250);
     private static TilingService.EngineSession? boundEngine;
     private static string? lastJournal;
 
@@ -47,6 +47,7 @@ internal static class FullscreenRoutingWorker
             EngineProcessStart: engine.StartTime.ToUniversalTime().Ticks);
         var leases = ReadJournal(engine);
         var detector = new FullscreenGameDetector();
+        using var layout = new TilingLayoutController(() => EngineMatches(engine));
         var exitCode = 0;
         try
         {
@@ -55,22 +56,32 @@ internal static class FullscreenRoutingWorker
                 if (metadata.RootElement.GetProperty("data").GetProperty("version").GetString() != TilingProvisioner.EngineVersion)
                     throw new InvalidOperationException("Fullscreen routing found an unexpected tiling engine version.");
             _ = await ReadSnapshotAsync([]);
+            var initialSettings = Settings.Load();
+            await layout.ReconcileAsync(SendAsync, detector.Detect(initialSettings.FullscreenGameExecutables), initialSettings);
             status = status with { Ready = true };
             WriteStatus(status);
             var signature = "";
             var changedAt = DateTimeOffset.UtcNow;
+            var routingWasEnabled = initialSettings.MoveTilesForFullscreenGames;
             while (EngineMatches(engine) && !StopRequested(status))
             {
                 var settings = Settings.Load();
-                if (!settings.MoveTilesForFullscreenGames) break;
                 var fullscreen = detector.Detect(settings.FullscreenGameExecutables);
                 var nextSignature = string.Join(";", fullscreen.OrderBy(window => window.Handle)
                     .Select(window => $"{window.Handle}:{window.ProcessStart}:{window.MonitorDevice}:{window.IsGame}"));
                 if (signature != nextSignature) { signature = nextSignature; changedAt = DateTimeOffset.UtcNow; }
                 // Enter/exit transitions settle before routing; short focus/mode
                 // changes should not scatter apps and immediately bring them back.
-                if (DateTimeOffset.UtcNow - changedAt < TimeSpan.FromSeconds(1)) { await Task.Delay(Interval); continue; }
-                if (fullscreen.Any(window => window.IsGame) || leases.Count > 0)
+                var message = "";
+                if (!settings.MoveTilesForFullscreenGames && leases.Count > 0)
+                {
+                    var paused = (await ReadSnapshotAsync(fullscreen)).Paused;
+                    if (routingWasEnabled || !paused) await RestoreAsync(engine, leases, detector);
+                    WriteJournal(engine, leases);
+                    if (leases.Count > 0) message = "Some focused apps stayed on their current monitor";
+                }
+                else if (settings.MoveTilesForFullscreenGames && DateTimeOffset.UtcNow - changedAt >= TimeSpan.FromSeconds(1)
+                    && (fullscreen.Any(window => window.IsGame) || leases.Count > 0))
                 {
                     var snapshot = await ReadSnapshotAsync(fullscreen);
                     var plan = FullscreenRoutingPolicy.Plan(snapshot.Monitors, snapshot.Windows,
@@ -82,20 +93,22 @@ internal static class FullscreenRoutingWorker
                     var blockedFocus = snapshot.Windows.Any(window => snapshot.GameMonitors.Contains(window.MonitorId) &&
                         window.IsTiling && !window.IsGame && (window.IsForeground || window.IsModelFocused));
                     var freeMonitor = snapshot.Monitors.Any(monitor => !monitor.IsFullscreen && !snapshot.GameMonitors.Contains(monitor.Id));
-                    var message = snapshot.Paused ? "Fullscreen routing paused" :
+                    message = snapshot.Paused ? "Fullscreen routing paused" :
                         gameSources > 0 && !freeMonitor ? "Fullscreen game detected; no free monitor" :
                         blockedFocus ? "Some apps stay behind to keep game focus" :
                         gameSources == 0 && leases.Count > 0 ? "Apps waiting to return to their original monitor" :
                         leases.Count > 0 ? $"{leases.Count} app{(leases.Count == 1 ? "" : "s")} moved around fullscreen game" : "";
-                    if (status.Message != message) { status = status with { Message = message }; WriteStatus(status); }
                 }
-                else if (status.Message.Length > 0) { status = status with { Message = "" }; WriteStatus(status); }
+                routingWasEnabled = settings.MoveTilesForFullscreenGames;
+                var layoutMessage = await layout.ReconcileAsync(SendAsync, fullscreen, settings);
+                if (layoutMessage.Length > 0) message = message.Length > 0 ? message + " · " + layoutMessage : layoutMessage;
+                if (status.Message != message) { status = status with { Message = message }; WriteStatus(status); }
                 await Task.Delay(Interval);
             }
         }
         catch (Exception error)
         {
-            status = status with { Error = true, Message = $"Fullscreen routing stopped: {error.Message}" };
+            status = status with { Error = true, Message = $"Tiling checks stopped: {error.Message}" };
             exitCode = 1;
         }
         finally

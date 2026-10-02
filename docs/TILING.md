@@ -7,7 +7,7 @@ installer or register GlazeWM globally.
 
 Change **Window gaps** to adjust spacing immediately. **Pause** leaves the
 current arrangement in place and releases tiling control until resumed.
-**Rearrange** redraws the layout; resume first if paused. Turn the main toggle
+**Rearrange** resets the layout to its balanced default; resume first if paused. Turn the main toggle
 off to stop the engine and restore surviving managed windows to the positions
 saved before enabling it. Windows opened afterwards remain where they are.
 
@@ -36,6 +36,43 @@ Tiling currently requires Windows 11 x64. Applications with unusual window
 frames, fixed sizes, or elevated privileges may not arrange normally. Pause,
 float an affected window, or disable tiling if an application behaves poorly.
 The engine's own tray menu remains available as an independent recovery route.
+
+## Placement and resizing
+
+New tiled windows go to the available monitor with the fewest visible application
+windows, including floating apps. Minimized and cloaked windows do not count.
+Ties prefer the primary monitor, then Windows display-number order. Fullscreen
+apps reserve their monitor. Existing windows stay on their current monitor unless
+fullscreen routing or insufficient space requires a move.
+
+On landscape monitors, the default arrangement is:
+
+| Windows | Layout |
+| --- | --- |
+| 1 | Full usable area |
+| 2 | Equal left and right halves |
+| 3 | One left tile, two stacked right tiles |
+| 4 | A 2 × 2 grid; the fourth window splits the left tile |
+
+Portrait monitors transpose these layouts. Larger sets use balanced rows or
+columns. Opening or closing a tile rebuilds the default arrangement; otherwise,
+manual split sizes, direction and window order are retained. Resizing a tile
+reflows its neighbours into the remaining space. **Rearrange** clears manual
+split choices.
+
+Winora checks the engine tree and actual window frames on a 250 ms polling loop,
+including apps that change their own size after opening. Repairs wait during
+interactive dragging/resizing and stop while paused. App minimum and maximum
+tracking sizes are queried with a bounded timeout; a 160 × 120 pixel safety
+minimum also prevents custom frames collapsing into specks.
+
+If a tile cannot fit its native limits, Winora first tries another available
+monitor. If none can fit it, or the app repeatedly refuses its requested size,
+it floats and the status identifies an arrangement limitation. A window floated
+automatically for lack of space can rejoin tiling when it fits. Windows floated
+by the user remain floating; manually moving or resizing an automatic fallback
+also takes precedence over recovery. Some fixed-size or elevated apps still
+cannot be tiled reliably.
 
 **Apps… → Add app…** remembers applications with custom or fixed-size frames
 that would otherwise start floating. Their eligible windows join the tiling
@@ -79,13 +116,14 @@ engine still considers it focused; Winora reports this limitation.
 
 Pausing tiling pauses redistribution. Switching the fullscreen preference off
 returns eligible background tiles, even if the game is still fullscreen, and
-stops its helper. Focused tiles can remain on their current monitor; the status
+keeps ordinary layout checking active. Focused tiles can remain on their current monitor; the status
 reports that. Turning tiling off restores the usual saved pre-tiling positions.
 
-This preference adds one headless Winora process only while its owned tiling
-engine is running and the preference is enabled. It shares the existing runtime,
-keeps its journal/status in Winora's own tiling data directory, and continues
-after closing the production settings window. Routing failures expose **Retry**.
+One headless Winora process handles both layout checking and fullscreen routing
+whenever its owned tiling engine is running, including when the fullscreen
+preference is off. It shares the existing runtime, keeps its journal/status in
+Winora's own tiling data directory, and continues after closing the production
+settings window. Helper failures expose **Retry**.
 Ordinary Dev preview never starts this process; live Dev closing stops it along
 with its test engine.
 
