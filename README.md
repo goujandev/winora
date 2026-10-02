@@ -1,7 +1,7 @@
 # Winora
 
-A Windows 11 appearance customiser prototype: C# / WPF settings, a separate
-native TranslucentTB taskbar engine, and a Velopack installer and updater.
+A Windows 11 desktop customiser in **beta**: C# / WPF settings, separate native
+taskbar and optional tiling engines, and a Velopack installer and updater.
 
 ## Try it
 
@@ -64,11 +64,14 @@ before Winora enables its effects. ARM64 is not supported in this prototype.
 
 ## Build
 
-The current development branch also includes optional automatic window tiling.
-Run `.\dev.cmd -TestTiling` to try it in **Winora Dev**, then enable the toggle
-on the Tiling page. Closing that test window stops its engine. See
-[tiling controls and limitations](docs/TILING.md). This feature is experimental
-and has not yet been included in a production release.
+Version 0.1.7 includes optional, experimental automatic window tiling. Enable it
+on the **Tiling** page. New windows go to the least crowded available monitor;
+balanced layouts, native-size checks and fullscreen-game routing run while tiling
+is enabled. It starts off and downloads its verified engine on first use. See
+[tiling controls and limitations](docs/TILING.md).
+
+To test changes locally, run `.\dev.cmd -TestTiling` in **Winora Dev**, then enable
+the toggle on the Tiling page. Closing that test window stops its engine.
 
 Install the .NET 10 SDK on Windows and the pinned packaging tool:
 
