@@ -141,19 +141,35 @@ public static class TilingLayoutPolicy
         if (windows.Length == 2)
         {
             yield return new Split(across, .5, new Leaf(windows[0]), new Leaf(windows[1]));
-            yield break;
         }
         if (windows.Length == 3)
         {
             yield return new Split(across, .5, new Leaf(windows[0]),
                 new Split(along, .5, new Leaf(windows[1]), new Leaf(windows[2])));
-            yield break;
         }
         if (windows.Length == 4)
         {
             yield return new Split(across, .5,
                 new Split(along, .5, new Leaf(windows[0]), new Leaf(windows[3])),
                 new Split(along, .5, new Leaf(windows[1]), new Leaf(windows[2])));
+        }
+
+        if (windows.Length <= 4)
+        {
+            // Try alternate shallow arrangements before declaring overflow.
+            // These trees are all expressible through the engine's public IPC.
+            foreach (var axis in new[] { across, along })
+            for (var cuts = 0; cuts < 1 << (windows.Length - 1); cuts++)
+            {
+                List<List<TilingLayoutWindow>> groups = [[]];
+                for (var index = 0; index < windows.Length; index++)
+                {
+                    groups[^1].Add(windows[index]);
+                    if (index < windows.Length - 1 && (cuts & (1 << index)) != 0) groups.Add([]);
+                }
+                var perpendicular = axis == TilingSplitDirection.Horizontal ? TilingSplitDirection.Vertical : TilingSplitDirection.Horizontal;
+                yield return GroupRecipe(groups.ToArray(), 0, groups.Count, axis, perpendicular);
+            }
             yield break;
         }
 

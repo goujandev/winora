@@ -80,6 +80,11 @@ internal static class TilingChecks
                 check(true, "Invalid monitor counts cannot generate an unusable workspace configuration");
             }
         }
+        var reserved = Section(TilingConfiguration.Build(8, 1, reserveMonitorWorkspaces: true), "workspaces");
+        check(Regex.Matches(reserved, @"(?m)^\s*-\s*name:").Count == 64
+            && Enumerable.Range(0, 64).All(index => Regex.IsMatch(reserved, $@"(?m)^\s*bind_to_monitor:\s*{index}\s*$"))
+            && !reserved.Contains("keep_alive", StringComparison.Ordinal),
+            "Live configuration reserves inactive bound workspaces for monitor hotplug without activating extra desktops");
     }
 
     private static string Section(string yaml, string name)

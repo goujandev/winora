@@ -7,11 +7,16 @@ namespace Winora;
 // Runs in the existing headless tiling helper, not in the settings window.
 // The engine tree and the real HWND frames are reconciled independently: an
 // app can accept management yet change its own size after the initial redraw.
-internal sealed class TilingLayoutController(Func<bool> engineAlive) : IDisposable
+internal sealed record TilingAutomaticChange(Guid Id, long Handle, int ProcessId, long ProcessStart, bool UserOverride = false,
+    string MonitorId = "", string Workspace = "", bool Floating = false);
+
+internal sealed class TilingLayoutController(Func<bool> engineAlive, ITilingNativeWindows? desktop = null,
+    ITilingInputMonitor? inputMonitor = null, Func<TilingAutomaticChange, Task>? automaticChange = null,
+    string? refreshPath = null) : IDisposable
 {
     internal static string RefreshPath => Path.Combine(TilingService.DirectoryPath, "layout-refresh.json");
-    private readonly TilingNativeWindows native = new();
-    private readonly TilingInputMonitor input = new();
+    private readonly ITilingNativeWindows native = desktop ?? new TilingNativeWindows();
+    private readonly ITilingInputMonitor input = inputMonitor ?? new TilingInputMonitor();
     private readonly Dictionary<Guid, long> arrival = [];
     private readonly HashSet<Guid> pending = [];
     private readonly Dictionary<Guid, string> memberships = [];
@@ -25,18 +30,25 @@ internal sealed class TilingLayoutController(Func<bool> engineAlive) : IDisposab
 
     private sealed record WindowState(Guid Id, long Handle, string State, Guid WorkspaceId,
         string Workspace, string Device, bool Focused, bool Dragging, TilingNativeWindow? Native,
-        bool MaximizedState, bool PreviouslyFloating);
+        bool MaximizedState, bool PreviouslyFloating, bool ModelVisible, TilingRect ModelBounds, string MonitorIdentity);
     private sealed record WorkspaceState(Guid MonitorId, Guid Id, string Name, string Device,
-        TilingNativeMonitor Monitor, IReadOnlyList<WindowState> Windows, TilingLayoutNode? Template, string EngineFingerprint);
+        TilingNativeMonitor Monitor, double ScaleFactor, IReadOnlyList<WindowState> Windows, TilingLayoutNode? Template, string EngineFingerprint);
     private sealed record State(bool Paused, IReadOnlyList<WorkspaceState> Workspaces)
     {
         internal IEnumerable<WindowState> Windows => Workspaces.SelectMany(workspace => workspace.Windows);
     }
     private sealed record Repair(TilingRect Bounds, long LastAttempt, int Attempts);
-    private sealed record AutomaticFloat(long Handle, string Device, int MinWidth, int MinHeight,
+    private sealed record AutomaticFloat(long Handle, int ProcessId, long ProcessStart, string Device, int MinWidth, int MinHeight,
         int? MaxWidth, int? MaxHeight, bool RefusedGeometry);
 
     public void Dispose() => input.Dispose();
+
+    internal void ObserveRoutingMove(FullscreenRoutingWindow window)
+    {
+        if (automaticFloats.TryGetValue(window.Id, out var fallback) && fallback.Handle == window.Handle
+            && fallback.ProcessId == window.ProcessId && fallback.ProcessStart == window.ProcessStart)
+            automaticFloats[window.Id] = fallback with { Device = window.MonitorDevice };
+    }
 
     internal async Task<string> ReconcileAsync(Func<string, Task<JsonDocument>> send,
         IReadOnlyList<NativeFullscreenWindow> fullscreen, UserSettings settings)
@@ -46,8 +58,12 @@ internal sealed class TilingLayoutController(Func<bool> engineAlive) : IDisposab
         {
             // Explicit manipulation of a floated app overrides our automatic
             // fallback. Leave user-floated windows outside recovery entirely.
-            foreach (var id in automaticFloats.Where(pair => pair.Value.Handle == TilingNativeWindows.ForegroundHandle)
-                .Select(pair => pair.Key).ToArray()) { automaticFloats.Remove(id); constrained.Remove(id); }
+            foreach (var (id, fallback) in automaticFloats.Where(pair => pair.Value.Handle == native.ForegroundHandle).ToArray())
+            {
+                automaticFloats.Remove(id); constrained.Remove(id);
+                if (automaticChange is not null)
+                    await automaticChange(new(id, fallback.Handle, fallback.ProcessId, fallback.ProcessStart, UserOverride: true));
+            }
             return "";
         }
         var state = await ReadAsync(send);
@@ -71,7 +87,7 @@ internal sealed class TilingLayoutController(Func<bool> engineAlive) : IDisposab
             && !fullscreen.Any(full => full.Handle == window.Handle)))
         {
             if (!engineAlive() || native.IsAnyMoveSizeActive()) break;
-            if (window.Focused && TilingNativeWindows.ForegroundHandle != window.Handle) continue;
+            if (window.Focused && native.ForegroundHandle != window.Handle) continue;
             if (!native.TryRead(window.Handle, out var current, queryConstraints: false) || !SameIdentity(window, current)
                 || !current.IsMaximized || current.IsMoveSizeActive) continue;
             // GlazeWM represents ordinary maximise as fullscreen(maximized:true).
@@ -94,13 +110,16 @@ internal sealed class TilingLayoutController(Func<bool> engineAlive) : IDisposab
             var changedLimits = current.MinWidth != fallback.MinWidth || current.MinHeight != fallback.MinHeight
                 || current.MaxWidth != fallback.MaxWidth || current.MaxHeight != fallback.MaxHeight;
             if (fallback.RefusedGeometry && !changedLimits) continue;
-            if (window.Focused && TilingNativeWindows.ForegroundHandle != window.Handle) continue;
+            if (window.Focused && native.ForegroundHandle != window.Handle) continue;
             var target = SelectDestination(state, window, occupied, settings.TilingGap, excludeCurrent: false);
             if (target is null) continue;
             if (target.Id != window.WorkspaceId && !await MoveAsync(send, window, target, state)) continue;
             using (var tiled = await send($"command --id {window.Id:D} set-tiling")) { }
-            automaticFloats.Remove(id); constrained.Remove(id);
             state = await ReadAsync(send);
+            var recovered = state.Windows.FirstOrDefault(candidate => candidate.Id == id);
+            if (recovered is not { State: "tiling", Native: { } observed } || !SameIdentity(window, observed)) continue;
+            automaticFloats.Remove(id); constrained.Remove(id);
+            await NotifyAutomaticChangeAsync(recovered);
         }
 
         // Only new windows are balanced. Existing/manual monitor placement and
@@ -110,7 +129,7 @@ internal sealed class TilingLayoutController(Func<bool> engineAlive) : IDisposab
             var window = state.Windows.FirstOrDefault(window => window.Id == id);
             if (window is null || !Eligible(window) || fullscreen.Any(full => full.Handle == window.Handle))
             { pending.Remove(id); continue; }
-            if (window.Focused && TilingNativeWindows.ForegroundHandle != window.Handle) continue;
+            if (window.Focused && native.ForegroundHandle != window.Handle) continue;
             var target = SelectDestination(state, window, occupied, settings.TilingGap, excludeCurrent: false);
             if (target is null) continue;
             if (target.Id == window.WorkspaceId) { pending.Remove(id); continue; }
@@ -128,10 +147,12 @@ internal sealed class TilingLayoutController(Func<bool> engineAlive) : IDisposab
             if (workspace is null || occupied.Contains(workspace.Device)) continue;
             var windows = OrderedTiles(workspace).ToArray();
             if (windows.Length == 0) { memberships.Remove(workspaceId); defaultLayouts.Remove(workspaceId); continue; }
-            var gap = ScaledGap(settings.TilingGap, windows);
+            var gap = ScaledGap(settings.TilingGap, workspace.ScaleFactor);
             var area = Inset(workspace.Monitor.WorkRect, gap);
             if (area.Width <= 0 || area.Height <= 0) continue;
-            var key = $"{area}:{gap}:" + string.Join(',', windows.Select(window => window.Id));
+            // Geometry changes reflow the user's tree; only membership changes
+            // and an explicit Rearrange choose a new default arrangement.
+            var key = string.Join(',', windows.Select(window => window.Id));
             if (memberships.GetValueOrDefault(workspaceId) != key) defaultLayouts.Add(workspaceId);
             var preserve = !defaultLayouts.Contains(workspaceId);
             var limits = LayoutWindows(windows);
@@ -139,6 +160,23 @@ internal sealed class TilingLayoutController(Func<bool> engineAlive) : IDisposab
                 ? TilingLayoutPolicy.Reflow(area, template, limits, gap)
                 : TilingLayoutPolicy.Build(area, limits, gap);
             if (preserve && !plan.FitsAll) plan = TilingLayoutPolicy.Build(area, limits, gap);
+
+            var partial = workspace.Windows.Any(window => window.State == "tiling" && window.ModelVisible && !Eligible(window));
+            if (partial)
+            {
+                // Retain the unknown window's allocation in the engine tree.
+                // Healthy neighbours can still be repaired inside their own
+                // model rectangles without overlapping or moving that window.
+                var cells = windows.Where(window => ValidModelBounds(window.ModelBounds, workspace.Monitor.WorkRect))
+                    .Select(window => new TilingLayoutLeaf(window.Id, window.ModelBounds)).ToArray();
+                var freshPartial = await ReadAsync(send);
+                var currentPartial = freshPartial.Workspaces.FirstOrDefault(candidate => candidate.Id == workspace.Id);
+                if (!freshPartial.Paused && currentPartial?.EngineFingerprint == workspace.EngineFingerprint)
+                    limited += await RepairFramesAsync(send, currentPartial, cells);
+                deferred |= cells.Length < windows.Length;
+                state = freshPartial;
+                continue;
+            }
 
             // If an app's minimum cannot fit, try another available monitor.
             // Floating is the honest fallback; never make a sub-minimum speck.
@@ -153,7 +191,7 @@ internal sealed class TilingLayoutController(Func<bool> engineAlive) : IDisposab
                 foreach (var id in overflow)
                 {
                     var window = windows.First(window => window.Id == id);
-                    if (window.Focused && TilingNativeWindows.ForegroundHandle != window.Handle) { limited++; continue; }
+                    if (window.Focused && native.ForegroundHandle != window.Handle) { limited++; continue; }
                     var target = SelectDestination(state, window, occupied, settings.TilingGap, excludeCurrent: true);
                     if (target is not null && await MoveAsync(send, window, target, state)) continue;
                     if (await FloatSafelyAsync(send, window, workspace)) limited++;
@@ -163,7 +201,7 @@ internal sealed class TilingLayoutController(Func<bool> engineAlive) : IDisposab
                 continue;
             }
 
-            var aligned = await TilingTreeReconciler.ReconcileAsync(workspace.Id, plan, send, workspace.EngineFingerprint);
+            var aligned = await TilingTreeReconciler.ReconcileAsync(workspace.Id, plan, send, workspace.EngineFingerprint, native);
             // Tree commands redraw asynchronously. Re-read state/identity after
             // them before considering any native correction.
             var fresh = await ReadAsync(send);
@@ -173,31 +211,39 @@ internal sealed class TilingLayoutController(Func<bool> engineAlive) : IDisposab
             { state = fresh; continue; }
             if (aligned) { memberships[workspaceId] = key; defaultLayouts.Remove(workspaceId); }
             else { deferred = true; state = fresh; continue; }
-            foreach (var cell in plan.Cells)
-            {
-                if (!engineAlive() || native.IsAnyMoveSizeActive()) break;
-                var window = current.Windows.FirstOrDefault(window => window.Id == cell.WindowId);
-                if (window is null || !Eligible(window) || window.Native is not { } actual) continue;
-                if (Near(actual.FrameRect, cell.Bounds)) { repairs.Remove(window.Id); continue; }
-                var now = Environment.TickCount64;
-                var repair = repairs.GetValueOrDefault(window.Id);
-                if (repair is not null && repair.Bounds == cell.Bounds && now - repair.LastAttempt < 220) continue;
-                if (repair is { Attempts: >= 8 } && repair.Bounds == cell.Bounds)
-                {
-                    // A restrictive app can repeatedly undo requested geometry.
-                    // Stop fighting it and expose its native limits instead.
-                    if (await FloatSafelyAsync(send, window, current, refusedGeometry: true)) limited++;
-                    continue;
-                }
-                var accepted = native.TrySetFrameBounds(actual, cell.Bounds);
-                repairs[window.Id] = new(cell.Bounds, now, repair?.Bounds == cell.Bounds ? repair.Attempts + 1 : 1);
-                if (!accepted) limited++;
-            }
+            limited += await RepairFramesAsync(send, current, plan.Cells);
             state = fresh;
         }
         var count = Math.Max(limited, constrained.Count);
         return count > 0 ? $"{count} app{(count == 1 ? "" : "s")} could not be arranged"
             : deferred ? "Layout waiting for active windows" : "";
+    }
+
+    private async Task<int> RepairFramesAsync(Func<string, Task<JsonDocument>> send, WorkspaceState current,
+        IReadOnlyList<TilingLayoutLeaf> cells)
+    {
+        var limited = 0;
+        foreach (var cell in cells)
+        {
+            if (!engineAlive() || native.IsAnyMoveSizeActive()) break;
+            var window = current.Windows.FirstOrDefault(window => window.Id == cell.WindowId);
+            if (window is null || !Eligible(window) || window.Native is not { } actual) continue;
+            if (Near(actual.FrameRect, cell.Bounds)) { repairs.Remove(window.Id); continue; }
+            var now = Environment.TickCount64;
+            var repair = repairs.GetValueOrDefault(window.Id);
+            if (repair is not null && repair.Bounds == cell.Bounds && now - repair.LastAttempt < 220) continue;
+            if (repair is { Attempts: >= 8 } && repair.Bounds == cell.Bounds)
+            {
+                // A restrictive app can repeatedly undo requested geometry.
+                // Stop fighting it and expose its native limits instead.
+                if (await FloatSafelyAsync(send, window, current, refusedGeometry: true)) limited++;
+                continue;
+            }
+            var accepted = native.TrySetFrameBounds(actual, cell.Bounds);
+            repairs[window.Id] = new(cell.Bounds, now, repair?.Bounds == cell.Bounds ? repair.Attempts + 1 : 1);
+            if (!accepted) limited++;
+        }
+        return limited;
     }
 
     private WorkspaceState? SelectDestination(State state, WindowState window, HashSet<string> occupied,
@@ -208,7 +254,7 @@ internal sealed class TilingLayoutController(Func<bool> engineAlive) : IDisposab
             .Select(workspace =>
             {
                 var tiles = OrderedTiles(workspace).Where(candidate => candidate.Id != window.Id).Append(window).ToArray();
-                var spacing = ScaledGap(gap, tiles);
+                var spacing = ScaledGap(gap, workspace.ScaleFactor);
                 var area = Inset(workspace.Monitor.WorkRect, spacing);
                 var fits = area.Width > 0 && area.Height > 0 && FitsNativeLimits(TilingLayoutPolicy.Build(area, LayoutWindows(tiles), spacing), tiles);
                 return new TilingMonitor(workspace.MonitorId, workspace.Monitor.IsPrimary, workspace.Monitor.DisplayOrder,
@@ -225,22 +271,23 @@ internal sealed class TilingLayoutController(Func<bool> engineAlive) : IDisposab
     {
         if (!engineAlive() || native.IsAnyMoveSizeActive() || !native.TryRead(window.Handle, out var before)
             || !SameIdentity(window, before)) return false;
-        var wasForeground = TilingNativeWindows.ForegroundHandle == window.Handle;
+        var wasForeground = native.ForegroundHandle == window.Handle;
         if (window.Focused && !wasForeground) return false;
         var preserveFocus = wasForeground && await input.RearmAsync();
         var inputVersion = input.Version;
-        if (wasForeground && TilingNativeWindows.ForegroundHandle != window.Handle) return false;
+        if (wasForeground && native.ForegroundHandle != window.Handle) return false;
         using (var response = await send($"command --id {window.Id:D} move --workspace {target.Name}")) { }
         var fresh = await ReadAsync(send);
         var moved = fresh.Windows.FirstOrDefault(candidate => candidate.Id == window.Id);
         if (moved is null || moved.WorkspaceId != target.Id || moved.Native is not { } observed
             || !SameIdentity(window, observed)) return false;
+        await NotifyAutomaticChangeAsync(moved);
         // Upstream workspace moves reset focus in the source. Preserve the new
         // app's existing focus only when the user did not interact meanwhile and
         // the observed fallback belongs to that exact source workspace. Ignore
         // the engine's tagged dummy mouse event. Fresh hook installation and
         // the responsive pump are confirmed before every focused move.
-        var foreground = TilingNativeWindows.ForegroundHandle;
+        var foreground = native.ForegroundHandle;
         if (preserveFocus && !fresh.Paused && foreground != window.Handle && input.IsReliable && input.Version == inputVersion)
         {
             using var focused = await send("query focused");
@@ -251,22 +298,20 @@ internal sealed class TilingLayoutController(Func<bool> engineAlive) : IDisposab
                 ? previous.Windows.Any(candidate => candidate.Id == id && candidate.WorkspaceId == window.WorkspaceId
                     && candidate.Handle == foreground && fresh.Windows.Any(actual => actual.Id == id
                         && actual.Native is { } observedFallback && SameIdentity(candidate, observedFallback)))
-                : type == "workspace" && id == window.WorkspaceId && TilingNativeWindows.IsDesktopHandle(foreground);
+                : type == "workspace" && id == window.WorkspaceId && native.IsDesktop(foreground);
             if (sourceFallback && engineAlive() && !native.IsAnyMoveSizeActive() && input.IsReliable
-                && input.Version == inputVersion && TilingNativeWindows.ForegroundHandle == foreground)
+                && input.Version == inputVersion && native.ForegroundHandle == foreground)
             { using var focus = await send($"command --id {window.Id:D} focus --container-id {window.Id:D}"); }
         }
         return true;
     }
-
-
 
     private async Task<bool> FloatSafelyAsync(Func<string, Task<JsonDocument>> send, WindowState window, WorkspaceState workspace,
         bool refusedGeometry = false)
     {
         if (!engineAlive() || native.IsAnyMoveSizeActive() || !native.TryRead(window.Handle, out var actual)
             || !SameIdentity(window, actual) || actual.IsMoveSizeActive
-            || window.Focused && TilingNativeWindows.ForegroundHandle != window.Handle) return false;
+            || window.Focused && native.ForegroundHandle != window.Handle) return false;
         using (var response = await send($"command --id {window.Id:D} set-floating --centered=false")) { }
         var fresh = await ReadAsync(send);
         var floating = fresh.Windows.FirstOrDefault(candidate => candidate.Id == window.Id);
@@ -283,10 +328,15 @@ internal sealed class TilingLayoutController(Func<bool> engineAlive) : IDisposab
         var corrected = native.TrySetFrameBounds(current, bounds);
         repairs.Remove(window.Id);
         constrained.Add(window.Id);
-        automaticFloats[window.Id] = new(window.Handle, workspace.Device, current.MinWidth, current.MinHeight,
+        automaticFloats[window.Id] = new(window.Handle, current.ProcessId, current.ProcessStart, workspace.Device, current.MinWidth, current.MinHeight,
             current.MaxWidth, current.MaxHeight, refusedGeometry || !corrected);
+        await NotifyAutomaticChangeAsync(floating);
         return true;
     }
+
+    private Task NotifyAutomaticChangeAsync(WindowState window) => automaticChange is not null && window.Native is { } actual
+        ? automaticChange(new(window.Id, window.Handle, actual.ProcessId, actual.ProcessStart,
+            MonitorId: window.MonitorIdentity, Workspace: window.Workspace, Floating: window.State == "floating")) : Task.CompletedTask;
 
     private IEnumerable<WindowState> OrderedTiles(WorkspaceState workspace) => workspace.Windows.Where(Eligible)
         .OrderBy(window => arrival.GetValueOrDefault(window.Id, long.MaxValue));
@@ -303,16 +353,20 @@ internal sealed class TilingLayoutController(Func<bool> engineAlive) : IDisposab
         return (limits.MaxWidth is null || cell.Bounds.Width <= limits.MaxWidth)
             && (limits.MaxHeight is null || cell.Bounds.Height <= limits.MaxHeight);
     });
-    private static int ScaledGap(int gap, IReadOnlyCollection<WindowState> windows) =>
-        (int)Math.Round(gap * (windows.FirstOrDefault()?.Native?.Dpi ?? 96) / 96.0);
+    internal static int ScaledGap(int gap, double monitorScale) => (int)Math.Round(gap * monitorScale);
     private static TilingRect Inset(TilingRect bounds, int gap) => new(bounds.X + gap, bounds.Y + gap,
         bounds.Width - gap * 2, bounds.Height - gap * 2);
     private static bool Near(TilingRect left, TilingRect right) => Math.Abs(left.X - right.X) <= 3
         && Math.Abs(left.Y - right.Y) <= 3 && Math.Abs(left.Width - right.Width) <= 3 && Math.Abs(left.Height - right.Height) <= 3;
 
+    private static bool ValidModelBounds(TilingRect bounds, TilingRect work) => bounds.Width > 0 && bounds.Height > 0
+        && bounds.X >= work.X && bounds.Y >= work.Y && (long)bounds.X + bounds.Width <= work.Right
+        && (long)bounds.Y + bounds.Height <= work.Bottom;
+
     private bool ReadRefresh()
     {
-        var next = File.Exists(RefreshPath) ? File.ReadAllText(RefreshPath) : "";
+        var path = refreshPath ?? RefreshPath;
+        var next = File.Exists(path) ? File.ReadAllText(path) : "";
         if (next == refresh) return false;
         refresh = next;
         return true;
@@ -328,6 +382,11 @@ internal sealed class TilingLayoutController(Func<bool> engineAlive) : IDisposab
             var device = monitor.GetProperty("deviceName").GetString() ?? "";
             if (!monitors.TryGetValue(device, out var physical)) continue;
             var monitorId = Guid.Parse(monitor.GetProperty("id").GetString()!);
+            var identity = monitor.TryGetProperty("devicePath", out var path) && path.ValueKind == JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(path.GetString()) ? path.GetString()! : device;
+            var scale = monitor.GetProperty("scaleFactor").GetDouble();
+            if (!double.IsFinite(scale) || scale is <= 0 or > 8)
+                throw new InvalidOperationException("The tiling monitor scale is invalid.");
             foreach (var workspace in monitor.GetProperty("children").EnumerateArray())
             {
                 if (workspace.GetProperty("type").GetString() != "workspace" || !workspace.GetProperty("isDisplayed").GetBoolean()) continue;
@@ -347,12 +406,15 @@ internal sealed class TilingLayoutController(Func<bool> engineAlive) : IDisposab
                             node.GetProperty("hasFocus").GetBoolean(), node.TryGetProperty("activeDrag", out var drag) && drag.ValueKind != JsonValueKind.Null,
                             actual, windowState.TryGetProperty("maximized", out var maximized) && maximized.GetBoolean(),
                             node.TryGetProperty("prevState", out var previous) && previous.ValueKind == JsonValueKind.Object
-                                && previous.GetProperty("type").GetString() == "floating"));
+                                && previous.GetProperty("type").GetString() == "floating",
+                            node.GetProperty("displayState").GetString() is "shown" or "showing",
+                            new(node.GetProperty("x").GetInt32(), node.GetProperty("y").GetInt32(),
+                                node.GetProperty("width").GetInt32(), node.GetProperty("height").GetInt32()), identity));
                     }
                     else if (node.TryGetProperty("children", out var children)) foreach (var child in children.EnumerateArray()) Read(child);
                 }
                 Read(workspace);
-                workspaces.Add(new(monitorId, id, name, device, physical, windows,
+                workspaces.Add(new(monitorId, id, name, device, physical, scale, windows,
                     ReadTemplate(workspace, windows.Where(Eligible).Select(window => window.Id).ToHashSet(), physical.WorkRect),
                     TilingTreeReconciler.Fingerprint(workspace)));
             }

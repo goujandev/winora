@@ -16,7 +16,7 @@ internal static class TilingTreeReconciler
     private const int MaximumCommands = 256;
 
     internal static async Task<bool> ReconcileAsync(Guid workspaceId, TilingLayoutPlan plan,
-        Func<string, Task<JsonDocument>> send, string? expectedFingerprint = null)
+        Func<string, Task<JsonDocument>> send, string? expectedFingerprint = null, ITilingNativeWindows? native = null)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(send);
@@ -33,7 +33,7 @@ internal static class TilingTreeReconciler
 
         try
         {
-            var context = new Context(workspaceId, ids, send, expectedFingerprint);
+            var context = new Context(workspaceId, ids, send, expectedFingerprint, native);
             var current = await context.ReadAsync();
             if (current is null) return false;
             if (desired is null) return current.Children.Count == 0;
@@ -333,7 +333,7 @@ internal static class TilingTreeReconciler
     }
 
     private sealed class Context(Guid workspaceId, Guid[] expectedIds, Func<string, Task<JsonDocument>> send,
-        string? expectedFingerprint)
+        string? expectedFingerprint, ITilingNativeWindows? native)
     {
         private readonly HashSet<Guid> expected = expectedIds.ToHashSet();
         private readonly Dictionary<Guid, (long Handle, int Process, long Start)> identities = [];
@@ -361,11 +361,11 @@ internal static class TilingTreeReconciler
                 && !string.Equals(acceptedFingerprint, fingerprint, StringComparison.Ordinal)) return null;
             var root = Parse(element, null);
             if (root is null || !root.Windows().Select(window => window.Id).ToHashSet().SetEquals(expected)) return null;
-            var foreground = GetForegroundWindow().ToInt64();
+            var foreground = native?.ForegroundHandle ?? GetForegroundWindow().ToInt64();
             foreach (var window in root.Windows())
             {
                 if (window.Dragging || window.Handle == 0 || (window.Focused && window.Handle != foreground)
-                    || !FullscreenGameDetector.TryGetIdentity(window.Handle, out var process, out var start)) return null;
+                    || !ReadIdentity(window.Handle, out var process, out var start)) return null;
                 var identity = (window.Handle, process, start);
                 if (identities.TryGetValue(window.Id, out var initial) && initial != identity) return null;
                 identities.TryAdd(window.Id, identity);
@@ -373,6 +373,10 @@ internal static class TilingTreeReconciler
             acceptedFingerprint = fingerprint;
             return root;
         }
+
+        private bool ReadIdentity(long handle, out int process, out long start) => native is not null
+            ? native.TryGetIdentity(handle, out process, out start)
+            : FullscreenGameDetector.TryGetIdentity(handle, out process, out start);
 
         internal async Task<Node?> ChangeAsync(Guid id, string command, Func<Node, bool>? preflight = null)
         {

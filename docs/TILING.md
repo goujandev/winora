@@ -10,6 +10,8 @@ current arrangement in place and releases tiling control until resumed.
 **Rearrange** resets the layout to its balanced default; resume first if paused. Turn the main toggle
 off to stop the engine and restore surviving managed windows to the positions
 saved before enabling it. Windows opened afterwards remain where they are.
+Saved positions can also be recovered after the engine exits independently;
+failed restorations remain available for Retry before another session starts.
 
 | Shortcut | Action |
 | --- | --- |
@@ -26,10 +28,13 @@ tray menu can stop tiling directly. Winora tiles alongside other applications;
 Windows shell surfaces are excluded and ordinary dialogs float. There is one
 tiling workspace per monitor. This version does not add virtual desktops,
 configurable shortcuts, or a separate bar.
+The configuration reserves inactive workspaces for additional displays, so a
+newly connected monitor can receive its workspace without restarting tiling.
 
 On production builds, the existing **Start Winora with Windows** preference
 restores enabled tiling at sign-in. Closing the production settings window leaves
-the engine running. An already-running independent GlazeWM or Komorebi instance
+the engine running. Closing waits for any pending tiling settings transaction
+to finish saving or rolling back. An already-running independent GlazeWM or Komorebi instance
 must be exited first; Winora refuses to control a different manager.
 
 Tiling currently requires Windows 11 x64. Applications with unusual window
@@ -58,16 +63,22 @@ Portrait monitors transpose these layouts. Larger sets use balanced rows or
 columns. Opening or closing a tile rebuilds the default arrangement; otherwise,
 manual split sizes, direction and window order are retained. Resizing a tile
 reflows its neighbours into the remaining space. **Rearrange** clears manual
-split choices.
+split choices. Gap, scaling and usable-area changes reflow the current layout
+without clearing those choices. Spacing follows the engine's monitor scale,
+including for applications that do not handle DPI scaling themselves.
 
 Winora checks the engine tree and actual window frames on a 250 ms polling loop,
 including apps that change their own size after opening. Repairs wait during
 interactive dragging/resizing and stop while paused. App minimum and maximum
 tracking sizes are queried with a bounded timeout; a 160 × 120 pixel safety
 minimum also prevents custom frames collapsing into specks.
+An unreadable window keeps its current engine allocation while healthy neighbours
+can still have their frames repaired. Temporary IPC failures retry automatically
+with bounded backoff; a different engine process remains an error.
 
-If a tile cannot fit its native limits, Winora first tries another available
-monitor. If none can fit it, or the app repeatedly refuses its requested size,
+If the default layout cannot fit native minimum sizes, Winora tries alternate
+row/column arrangements before moving a tile to another available monitor.
+If none can fit it, or the app repeatedly refuses its requested size,
 it floats and the status identifies an arrangement limitation. A window floated
 automatically for lack of space can rejoin tiling when it fits. Windows floated
 by the user remain floating; manually moving or resizing an automatic fallback
@@ -109,6 +120,8 @@ exclusive Direct3D themselves. Windows reports a graphics mode, not a game label
 When fullscreen ends, surviving background tiles return to their original
 physical monitors once available. Moving an app to another monitor/workspace,
 or switching it out of tiling, takes precedence over automatic restoration.
+Automatic layout moves and size-related floating preserve the original monitor
+in the routing journal; they do not count as user overrides.
 The engine rebuilds the tiling layout; the previous split order is not guaranteed.
 Focused apps are deferred to avoid interrupting what you are using. For games
 excluded from GlazeWM, one background app may also remain behind because the
@@ -123,7 +136,8 @@ One headless Winora process handles both layout checking and fullscreen routing
 whenever its owned tiling engine is running, including when the fullscreen
 preference is off. It shares the existing runtime, keeps its journal/status in
 Winora's own tiling data directory, and continues after closing the production
-settings window. Helper failures expose **Retry**.
+settings window. Temporary connection failures recover automatically; failures
+that stop the helper expose **Retry**.
 Ordinary Dev preview never starts this process; live Dev closing stops it along
 with its test engine.
 

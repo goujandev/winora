@@ -13,8 +13,8 @@ public partial class MainWindow
     private readonly DispatcherTimer tilingHealthTimer = new() { Interval = TimeSpan.FromSeconds(5) };
     private bool busyTiling;
     private bool tilingPaused;
-    private bool closingTilingTest;
-    private bool tilingTestStopped;
+    private bool closingTilingWindow;
+    private bool tilingWindowReadyToClose;
     private int tilingGapGeneration;
     private Func<Task>? retryTiling;
 
@@ -62,9 +62,9 @@ public partial class MainWindow
     private void RefreshTilingInteractionState()
     {
         if (TilingEnabledCheckBox is null) return;
-        var available = !busyTray && !busyTiling && !changes.IsBusy && !restartingUpdate && !closingTilingTest;
+        var available = !busyTray && !busyTiling && !changes.IsBusy && !restartingUpdate && !closingTilingWindow;
         TilingEnabledCheckBox.IsEnabled = available;
-        TilingGapSlider.IsEnabled = !busyTray && !restartingUpdate && !closingTilingTest;
+        TilingGapSlider.IsEnabled = !busyTray && !restartingUpdate && !closingTilingWindow;
         TilingPauseButton.IsEnabled = available && TilingEnabledCheckBox.IsChecked == true;
         TilingRetileButton.IsEnabled = TilingPauseButton.IsEnabled && !tilingPaused;
         TilingRetileButton.ToolTip = tilingPaused ? "Resume tiling before rearranging windows." : null;
@@ -101,7 +101,9 @@ public partial class MainWindow
 
     private async Task ChangeTilingAsync(bool enabled, bool restoring = false)
     {
+        if (closingTilingWindow) return;
         await tilingChanges.WaitAsync();
+        if (closingTilingWindow) { tilingChanges.Release(); return; }
         busyTiling = true;
         RefreshInteractionState();
         var previous = Settings.Load();
@@ -160,7 +162,7 @@ public partial class MainWindow
         if (initializing || synchronizing || previewOnly) return;
         var generation = ++tilingGapGeneration;
         await Task.Delay(250);
-        if (generation != tilingGapGeneration || closingTilingTest) return;
+        if (generation != tilingGapGeneration || closingTilingWindow) return;
         await tilingChanges.WaitAsync();
         busyTiling = true;
         RefreshInteractionState();
@@ -216,7 +218,9 @@ public partial class MainWindow
 
     private async Task RunTilingActionAsync(Func<Task> action)
     {
+        if (closingTilingWindow) return;
         await tilingChanges.WaitAsync();
+        if (closingTilingWindow) { tilingChanges.Release(); return; }
         busyTiling = true;
         RefreshInteractionState();
         try { await action(); }
@@ -239,22 +243,34 @@ public partial class MainWindow
     protected override void OnClosing(CancelEventArgs e)
     {
         base.OnClosing(e);
-        if (e.Cancel || !AppBuild.IsTilingTest || tilingTestStopped) return;
+        if (e.Cancel || tilingWindowReadyToClose) return;
+        // Close only after the running transaction has committed or rolled
+        // back. Production keeps its engine; live test mode also stops it.
         e.Cancel = true;
-        if (closingTilingTest) return;
-        closingTilingTest = true;
-        _ = CloseTilingTestAsync();
+        if (closingTilingWindow) return;
+        closingTilingWindow = true;
+        ++tilingGapGeneration;
+        RefreshInteractionState();
+        _ = CloseAfterTilingAsync();
     }
 
-    private async Task CloseTilingTestAsync()
+    private async Task CloseAfterTilingAsync()
     {
+        // Let the first Closing event finish before issuing the final Close,
+        // including when no transaction currently owns the semaphore.
+        await Dispatcher.Yield(DispatcherPriority.Background);
         await tilingChanges.WaitAsync();
-        try { await tiling.DisableAsync(); tilingTestStopped = true; Close(); }
+        try
+        {
+            if (AppBuild.IsTilingTest) await tiling.DisableAsync();
+            tilingWindowReadyToClose = true;
+            Close();
+        }
         catch (Exception error)
         {
             Trace.WriteLine(error);
-            closingTilingTest = false;
-            ShowTilingStatus($"Couldn’t stop the tiling test: {error.Message}", error: true);
+            closingTilingWindow = false;
+            ShowTilingStatus($"Couldn’t close settings: {error.Message}", error: true);
         }
         finally { tilingChanges.Release(); RefreshInteractionState(); }
     }

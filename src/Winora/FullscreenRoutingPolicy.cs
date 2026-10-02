@@ -4,11 +4,12 @@ public sealed record FullscreenRoutingMonitor(string Id, string WorkspaceName, b
 
 public sealed record FullscreenRoutingWindow(Guid Id, long Handle, int ProcessId, long ProcessStart,
     string MonitorId, string WorkspaceName, bool IsTiling = true, bool IsVisible = true,
-    bool IsForeground = false, bool IsGame = false, bool IsModelFocused = false, bool IsDragging = false);
+    bool IsForeground = false, bool IsGame = false, bool IsModelFocused = false, bool IsDragging = false,
+    bool IsFloating = false, string MonitorDevice = "");
 
 public sealed record FullscreenRoutingLease(Guid Id, long Handle, int ProcessId, long ProcessStart,
     string OriginalMonitorId, string OriginalWorkspaceName, string DestinationMonitorId,
-    string DestinationWorkspaceName, bool UserMoved = false);
+    string DestinationWorkspaceName, bool UserMoved = false, bool AutomaticallyFloating = false);
 
 public sealed record FullscreenRoutingMove(FullscreenRoutingWindow Window, string DestinationMonitorId,
     string DestinationWorkspaceName, bool IsRestore, FullscreenRoutingLease Lease);
@@ -33,7 +34,8 @@ public static class FullscreenRoutingPolicy
         foreach (var lease in leases ?? [])
         {
             if (lease.UserMoved || !windowById.TryGetValue(lease.Id, out var window) || !SameIdentity(window, lease)
-                || !window.IsTiling || !SameMonitor(window.MonitorId, lease.DestinationMonitorId)) continue;
+                || !(window.IsTiling || lease.AutomaticallyFloating && window.IsFloating)
+                || !SameMonitor(window.MonitorId, lease.DestinationMonitorId)) continue;
             if (window.WorkspaceName == lease.DestinationWorkspaceName) retained.Add(lease);
             else if (monitorById.TryGetValue(lease.DestinationMonitorId, out var destination)
                 && window.WorkspaceName == destination.WorkspaceName)
@@ -55,7 +57,7 @@ public static class FullscreenRoutingPolicy
         foreach (var lease in retained.OrderBy(lease => lease.Id))
         {
             var window = windowById[lease.Id];
-            if (!CanMove(window) || !monitorById.TryGetValue(lease.OriginalMonitorId, out var original)
+            if (!CanMove(window, lease.AutomaticallyFloating) || !monitorById.TryGetValue(lease.OriginalMonitorId, out var original)
                 || (enabled && (original.IsFullscreen || protectedMonitors.Contains(original.Id)))) continue;
             // Workspace names follow monitor order; monitor identity survives
             // reconnection/reordering, so use its currently bound workspace.
@@ -92,7 +94,16 @@ public static class FullscreenRoutingPolicy
 
     internal static bool SameMonitor(string left, string right) => StringComparer.OrdinalIgnoreCase.Equals(left, right);
 
-    private static bool CanMove(FullscreenRoutingWindow window) => window.IsTiling && window.IsVisible
+    internal static FullscreenRoutingLease? ObserveAutomaticPlacement(FullscreenRoutingLease lease, FullscreenRoutingWindow window)
+        => SameIdentity(window, lease) && (window.IsTiling || window.IsFloating)
+            ? lease with { DestinationMonitorId = window.MonitorId, DestinationWorkspaceName = window.WorkspaceName,
+                AutomaticallyFloating = window.IsFloating } : null;
+
+    internal static bool CanRestoreState(FullscreenRoutingWindow window, FullscreenRoutingLease lease)
+        => window.IsTiling || lease.AutomaticallyFloating && window.IsFloating;
+
+    private static bool CanMove(FullscreenRoutingWindow window, bool allowFloating = false)
+        => (window.IsTiling || allowFloating && window.IsFloating) && window.IsVisible
         && !window.IsForeground && !window.IsGame && !window.IsModelFocused && !window.IsDragging
         && window.Handle != 0 && window.ProcessId > 0 && window.ProcessStart > 0;
 
@@ -126,7 +137,8 @@ public sealed class FullscreenRoutingCoordinator
 
     public bool Complete(FullscreenRoutingMove move, FullscreenRoutingWindow observedWindow)
     {
-        if (!FullscreenRoutingPolicy.SameIdentity(observedWindow, move.Lease) || !observedWindow.IsTiling
+        if (!FullscreenRoutingPolicy.SameIdentity(observedWindow, move.Lease)
+            || !FullscreenRoutingPolicy.CanRestoreState(observedWindow, move.Lease)
             || !FullscreenRoutingPolicy.SameMonitor(observedWindow.MonitorId, move.DestinationMonitorId)
             || observedWindow.WorkspaceName != move.DestinationWorkspaceName) return false;
         if (move.IsRestore) leases.Remove(move.Window.Id);
@@ -137,5 +149,13 @@ public sealed class FullscreenRoutingCoordinator
     public void MarkUserMoved(Guid windowId)
     {
         if (leases.TryGetValue(windowId, out var lease)) leases[windowId] = lease with { UserMoved = true };
+    }
+
+    public bool ObserveAutomaticPlacement(FullscreenRoutingWindow observedWindow)
+    {
+        if (!leases.TryGetValue(observedWindow.Id, out var lease)
+            || FullscreenRoutingPolicy.ObserveAutomaticPlacement(lease, observedWindow) is not { } updated) return false;
+        leases[observedWindow.Id] = updated;
+        return true;
     }
 }

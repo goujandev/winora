@@ -16,7 +16,19 @@ internal sealed record TilingNativeWindow(long Handle, int ProcessId, long Proce
 
 // The engine's model is not proof that an app accepted its requested size.
 // Read actual frame bounds and native tracking limits before reconciling tiles.
-internal sealed class TilingNativeWindows
+internal interface ITilingNativeWindows
+{
+    long ForegroundHandle { get; }
+    bool IsDesktop(long handle);
+    bool TryGetIdentity(long handle, out int processId, out long started);
+    IReadOnlyList<TilingNativeMonitor> GetMonitors();
+    IReadOnlyList<TilingNativeWindow> GetOpenWindows();
+    bool IsAnyMoveSizeActive();
+    bool TryRead(long handle, out TilingNativeWindow window, bool queryConstraints = true);
+    bool TrySetFrameBounds(TilingNativeWindow expected, TilingRect desiredFrame);
+}
+
+internal sealed class TilingNativeWindows : ITilingNativeWindows
 {
     private const uint GetMinMaxInfo = 0x0024;
     private const uint MessageTimeoutFlags = 0x0001 | 0x0002 | 0x0020; // BLOCK | ABORTIFHUNG | ERRORONEXIT
@@ -25,13 +37,17 @@ internal sealed class TilingNativeWindows
     private readonly object constraintsLock = new();
 
     internal static long ForegroundHandle => (long)GetForegroundWindow();
+    long ITilingNativeWindows.ForegroundHandle => ForegroundHandle;
+    bool ITilingNativeWindows.IsDesktop(long handle) => IsDesktopHandle(handle);
+    bool ITilingNativeWindows.TryGetIdentity(long handle, out int processId, out long started)
+        => FullscreenGameDetector.TryGetIdentity(handle, out processId, out started);
     internal static bool IsDesktopHandle(long handle)
     {
         var shell = GetShellWindow();
         return handle != 0 && handle == (long)(shell != 0 ? shell : GetDesktopWindow());
     }
 
-    internal IReadOnlyList<TilingNativeMonitor> GetMonitors()
+    public IReadOnlyList<TilingNativeMonitor> GetMonitors()
     {
         var monitors = new List<TilingNativeMonitor>();
         MonitorCallback callback = (monitor, context, rectangle, parameter) =>
@@ -51,7 +67,7 @@ internal sealed class TilingNativeWindows
             .Select((monitor, order) => monitor with { DisplayOrder = order }).ToArray();
     }
 
-    internal IReadOnlyList<TilingNativeWindow> GetOpenWindows()
+    public IReadOnlyList<TilingNativeWindow> GetOpenWindows()
     {
         var windows = new List<TilingNativeWindow>();
         WindowCallback callback = (handle, parameter) =>
@@ -64,13 +80,13 @@ internal sealed class TilingNativeWindows
         return windows;
     }
 
-    internal bool IsAnyMoveSizeActive()
+    public bool IsAnyMoveSizeActive()
     {
         var info = NewGuiThreadInfo();
         return GetGUIThreadInfo(0, ref info) && (info.Flags & 0x0002 /* GUI_INMOVESIZE */) != 0;
     }
 
-    internal bool TryRead(long handle, out TilingNativeWindow window, bool queryConstraints = true)
+    public bool TryRead(long handle, out TilingNativeWindow window, bool queryConstraints = true)
     {
         window = null!;
         var nativeHandle = (nint)handle;
@@ -117,7 +133,7 @@ internal sealed class TilingNativeWindows
 
     // Success means Windows accepted the request. ASYNCWINDOWPOS avoids waiting
     // on another app's thread; the coordinator must verify its resulting bounds.
-    internal bool TrySetFrameBounds(TilingNativeWindow expected, TilingRect desiredFrame)
+    public bool TrySetFrameBounds(TilingNativeWindow expected, TilingRect desiredFrame)
     {
         if (desiredFrame.Width <= 0 || desiredFrame.Height <= 0 || IsAnyMoveSizeActive() ||
             !TryRead(expected.Handle, out var current) || current.ProcessId != expected.ProcessId ||

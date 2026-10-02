@@ -120,11 +120,20 @@ internal static class TilingLayoutChecks
                 [windows[0] with { MinWidth = 400 }, windows[1], windows[2], windows[3]], 8);
         check(outputStable.Cells.Select(cell => cell.Bounds).SequenceEqual(weightedMinima.Cells.Select(cell => cell.Bounds)),
             "Reflow output can be reused as a template without virtual-group gap drift");
-        var overflow = TilingLayoutPolicy.Build(new(0, 0, 300, 300), windows[..2], 8);
+        var overflow = TilingLayoutPolicy.Build(new(0, 0, 300, 200), windows[..2], 8);
         check(!overflow.FitsAll && overflow.Cells.Single().WindowId == windows[0].Id
             && overflow.OverflowWindowIds.SequenceEqual([windows[1].Id])
             && overflow.Cells.Single().Bounds.Width == 300,
             "An infeasible split explicitly overflows the later window rather than creating a speck");
+        var widePair = TilingLayoutPolicy.Build(new(0, 0, 1000, 600),
+            windows[..2].Select(window => window with { MinWidth = 600 }).ToArray(), 8);
+        var tallThree = TilingLayoutPolicy.Build(new(0, 0, 1000, 600),
+            windows[..3].Select(window => window with { MinHeight = 400 }).ToArray(), 8);
+        var tallFour = TilingLayoutPolicy.Build(new(0, 0, 1000, 600),
+            windows[..4].Select(window => window with { MinHeight = 400 }).ToArray(), 8);
+        check(widePair.FitsAll && widePair.Root is TilingLayoutSplit { Direction: TilingSplitDirection.Vertical }
+            && tallThree.FitsAll && tallFour.FitsAll,
+            "Small layouts try alternate orientations and strips before unnecessarily floating an app");
         var impossible = TilingLayoutPolicy.Build(new(0, 0, 500, 500), [windows[0] with { MinWidth = 800 }]);
         check(impossible.Root is null && impossible.Cells.Count == 0
             && impossible.OverflowWindowIds.SequenceEqual([windows[0].Id]),

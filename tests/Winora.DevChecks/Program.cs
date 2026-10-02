@@ -352,6 +352,25 @@ internal static class DevChecks
                 && ((FrameworkElement)liveWindow.FindName("SettingsPage")).Visibility == Visibility.Collapsed
                 && ((FrameworkElement)liveWindow.FindName("TilingPage")).Visibility == Visibility.Collapsed,
                 "Taskbar navigation returns to the existing controls");
+            var closingWindow = new MainWindow(previewOnly: true);
+            var gate = (SemaphoreSlim)typeof(MainWindow).GetField("tilingChanges",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(closingWindow)!;
+            var closed = false;
+            closingWindow.Closed += (_, _) => closed = true;
+            gate.Wait();
+            try
+            {
+                closingWindow.Close();
+                Check(!closed && !((CheckBox)closingWindow.FindName("TilingEnabledCheckBox")).IsEnabled,
+                    "Closing settings defers exit and disables mutations while a tiling transaction is still running");
+            }
+            finally { gate.Release(); }
+            Check(PumpUntil(() => closed), "Settings closes after its tiling transaction drains without stopping a production engine");
+            var idleClosingWindow = new MainWindow(previewOnly: true);
+            var idleClosed = false;
+            idleClosingWindow.Closed += (_, _) => idleClosed = true;
+            idleClosingWindow.Close();
+            Check(PumpUntil(() => idleClosed), "Idle settings closes without reentering its Closing event");
             Check(JsonSerializer.Serialize(before) == JsonSerializer.Serialize(ReadProductionPreferences())
                 && startupBefore == RegistrySnapshot(@"Software\Microsoft\Windows\CurrentVersion\Run")
                 && trayPreferenceBefore == RegistrySnapshot(@"Software\Winora\TrayIcons\Preference")

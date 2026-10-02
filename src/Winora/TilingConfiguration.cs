@@ -13,7 +13,7 @@ public static class TilingConfiguration
     // GlazeWM v3.10.1 configuration. Keep every managed monitor on its own
     // workspace, with no workspace-switch bindings or external commands.
     public static string Build(int gap, int monitorCount = 1, string[]? excludedGameExecutables = null,
-        string[]? tiledAppExecutables = null)
+        string[]? tiledAppExecutables = null, bool reserveMonitorWorkspaces = false)
     {
         if (gap is < MinimumGap or > MaximumGap) throw new ArgumentOutOfRangeException(nameof(gap));
         if (monitorCount is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(monitorCount));
@@ -59,7 +59,8 @@ public static class TilingConfiguration
                   shown_on_top: false
             workspaces:
             """);
-        for (var monitor = 0; monitor < monitorCount; monitor++)
+        // Keep an inactive bound config available for a newly connected display.
+        for (var monitor = 0; monitor < (reserveMonitorWorkspaces ? 64 : monitorCount); monitor++)
         {
             config.Append('\n').Append("  - name: 'monitor-").Append(monitor + 1).Append("'\n")
                 .Append("    bind_to_monitor: ").Append(monitor);

@@ -87,7 +87,9 @@ public partial class MainWindow
 
     private async Task ChangeTiledAppsAsync(Func<string[]?, string[]?> change)
     {
+        if (closingTilingWindow) return;
         await tilingChanges.WaitAsync();
+        if (closingTilingWindow) { tilingChanges.Release(); return; }
         busyTiling = true;
         RefreshInteractionState();
         var previous = Settings.Load().TiledAppExecutables;

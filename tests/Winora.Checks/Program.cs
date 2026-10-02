@@ -90,6 +90,7 @@ await StartupChecks.Run(Check);
 TilingChecks.Run(Check);
 TilingLayoutChecks.Run(Check);
 FullscreenRoutingChecks.Run(Check);
+await TilingArchitectureChecks.RunAsync(Check);
 
 // Opt-in integration check changes the taskbar temporarily and restores it in finally.
 if (args.Length == 2 && args[0] == "--engine")

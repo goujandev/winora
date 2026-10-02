@@ -43,12 +43,15 @@ public sealed class TilingService
             { await WriteConfigurationAsync(gap, 1); return; }
             ThrowIfForeignManagerRunning();
             await TilingProvisioner.EnsureAsync(progress);
+            using var mutation = await TilingMutationLock.AcquireAsync();
             using var existing = FindOwnedProcess();
             if (existing is not null)
             { await ChangeConfigurationAsync(gap); await RefreshFullscreenRoutingCoreAsync(); return; }
             ThrowIfForeignManagerRunning();
             if (ListenerOwner() is not null)
                 throw new InvalidOperationException("Another application is using the tiling engine’s local connection. Close it before enabling tiling.");
+            await StopFullscreenRoutingCoreAsync(throwOnRestoreFailure: false);
+            await RestoreStoppedSessionAsync();
             await WriteConfigurationAsync(gap, MonitorCount());
             SaveWindowPositions();
             if (File.Exists(ManagedPath)) File.Delete(ManagedPath);
@@ -130,6 +133,7 @@ public sealed class TilingService
         try
         {
             if (!AppBuild.AllowTilingEffects) { await WriteConfigurationAsync(gap, 1); return; }
+            using var mutation = await TilingMutationLock.AcquireAsync();
             ThrowIfForeignManagerRunning();
             if (IsRunning) await ChangeConfigurationAsync(gap);
             else await WriteConfigurationAsync(gap, MonitorCount());
@@ -168,7 +172,11 @@ public sealed class TilingService
     {
         if (!AppBuild.AllowTilingEffects) return;
         await Changes.WaitAsync();
-        try { using var response = await SendAsync("command wm-toggle-pause"); }
+        try
+        {
+            using var mutation = await TilingMutationLock.AcquireAsync();
+            using var response = await SendAsync("command wm-toggle-pause");
+        }
         finally { Changes.Release(); }
     }
 
@@ -178,6 +186,7 @@ public sealed class TilingService
         await Changes.WaitAsync();
         try
         {
+            using var mutation = await TilingMutationLock.AcquireAsync();
             using var state = await SendAsync("query paused");
             if (state.RootElement.GetProperty("data").GetBoolean())
                 throw new InvalidOperationException("Resume tiling before rearranging windows.");
@@ -213,7 +222,11 @@ public sealed class TilingService
     {
         if (!AppBuild.AllowTilingEffects) return;
         await Changes.WaitAsync();
-        try { await DisableCoreAsync(); }
+        try
+        {
+            using var mutation = await TilingMutationLock.AcquireAsync();
+            await DisableCoreAsync();
+        }
         finally { Changes.Release(); }
     }
 
@@ -223,7 +236,7 @@ public sealed class TilingService
         // The ordinary pre-tiling placement restore below follows engine exit.
         await StopFullscreenRoutingCoreAsync(throwOnRestoreFailure: false);
         using var process = FindOwnedProcess();
-        if (process is null) { await StopOwnedWatchersAsync(); return; }
+        if (process is null) { await RestoreStoppedSessionAsync(); return; }
         var managed = ReadManagedHandles(process);
         try
         {
@@ -247,6 +260,21 @@ public sealed class TilingService
         }
         await StopOwnedWatchersAsync();
         RestoreWindowPositions(managed);
+        DeleteSessionSnapshots();
+    }
+
+    private static async Task RestoreStoppedSessionAsync()
+    {
+        // The recovery journal outlives the process whose windows it records.
+        // Do not overwrite it on a subsequent enable or interfere with another WM.
+        ThrowIfForeignManagerRunning();
+        await StopOwnedWatchersAsync();
+        RestoreWindowPositions(ReadManagedHandles());
+        DeleteSessionSnapshots();
+    }
+
+    private static void DeleteSessionSnapshots()
+    {
         if (File.Exists(SnapshotPath)) File.Delete(SnapshotPath);
         if (File.Exists(ManagedPath)) File.Delete(ManagedPath);
         if (File.Exists(FullscreenRoutingWorker.JournalPath)) File.Delete(FullscreenRoutingWorker.JournalPath);
@@ -258,6 +286,7 @@ public sealed class TilingService
         await Changes.WaitAsync();
         try
         {
+            using var mutation = await TilingMutationLock.AcquireAsync();
             // Register game exclusions in the engine before polling can see
             // their fullscreen surface. Its manage event precedes our worker.
             if (IsRunning) await ChangeConfigurationAsync(Settings.Load().TilingGap);
@@ -400,13 +429,14 @@ public sealed class TilingService
         File.WriteAllText(ManagedPath, JsonSerializer.Serialize(state));
     }
 
-    private static HashSet<long> ReadManagedHandles(Process process)
+    private static HashSet<long> ReadManagedHandles(Process? process = null)
     {
         try
         {
             if (!File.Exists(ManagedPath)) return [];
             var state = JsonSerializer.Deserialize<ManagedWindows>(File.ReadAllText(ManagedPath));
-            return state is not null && state.Handles is not null && state.ProcessId == process.Id && state.ProcessStart == process.StartTime.ToUniversalTime().Ticks
+            return state is not null && state.Handles is not null && state.ProcessId > 0 && state.ProcessStart > 0
+                && (process is null || state.ProcessId == process.Id && state.ProcessStart == process.StartTime.ToUniversalTime().Ticks)
                 ? state.Handles : [];
         }
         catch (Exception error) when (error is IOException or JsonException or UnauthorizedAccessException) { return []; }
@@ -418,7 +448,8 @@ public sealed class TilingService
         var temporary = ConfigurationPath + ".tmp";
         var settings = Settings.Load();
         await File.WriteAllTextAsync(temporary, TilingConfiguration.Build(gap, monitors,
-            settings.FullscreenGameExecutables, settings.TiledAppExecutables));
+            settings.FullscreenGameExecutables, settings.TiledAppExecutables,
+            reserveMonitorWorkspaces: AppBuild.AllowTilingEffects));
         File.Move(temporary, ConfigurationPath, overwrite: true);
     }
 
@@ -464,13 +495,13 @@ public sealed class TilingService
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
                 if (socket is null)
                 {
-                    if (ListenerOwner() != ProcessId)
-                        throw new InvalidOperationException("Winora couldn’t verify the tiling engine’s local connection.");
+                    VerifyListenerOwner(ProcessId, ListenerOwner());
                     socket = new ClientWebSocket();
                     socket.Options.Proxy = null;
                     await socket.ConnectAsync(new Uri($"ws://127.0.0.1:{IpcPort}"), timeout.Token);
-                    if (ListenerOwner() != ProcessId || !IsAlive)
+                    if (!IsAlive)
                         throw new InvalidOperationException("The tiling engine’s connection changed. Try again.");
+                    VerifyListenerOwner(ProcessId, ListenerOwner());
                 }
                 // This connected socket is pinned to the verified server. Its
                 // peer cannot turn into a new listener; the retained kernel
@@ -494,20 +525,28 @@ public sealed class TilingService
     private static async Task<JsonDocument> SendCoreAsync(string command)
     {
         using var process = FindOwnedProcess() ?? throw new InvalidOperationException("The tiling engine isn’t running.");
-        if (ListenerOwner() != process.Id)
-            throw new InvalidOperationException("Winora couldn’t verify the tiling engine’s local connection.");
+        VerifyListenerOwner(process.Id, ListenerOwner());
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
         using var socket = new ClientWebSocket();
         socket.Options.Proxy = null;
         await socket.ConnectAsync(new Uri($"ws://127.0.0.1:{IpcPort}"), timeout.Token);
         // Recheck after connecting: never command a different manager through
         // the upstream engine’s shared local IPC port.
-        if (ListenerOwner() != process.Id || process.HasExited)
+        if (process.HasExited)
             throw new InvalidOperationException("The tiling engine’s connection changed. Try again.");
+        VerifyListenerOwner(process.Id, ListenerOwner());
         return await SendReceiveAsync(socket, command, new byte[8192], timeout.Token);
     }
 
-    private static async Task<JsonDocument> SendReceiveAsync(ClientWebSocket socket, string command, byte[] buffer, CancellationToken cancellation)
+    internal static void VerifyListenerOwner(int expectedProcessId, int? actualProcessId)
+    {
+        if (actualProcessId is null)
+            throw new WebSocketException(WebSocketError.ConnectionClosedPrematurely, "The tiling engine’s connection is temporarily unavailable.");
+        if (actualProcessId != expectedProcessId)
+            throw new InvalidOperationException("Winora couldn’t verify the tiling engine’s local connection.");
+    }
+
+    internal static async Task<JsonDocument> SendReceiveAsync(WebSocket socket, string command, byte[] buffer, CancellationToken cancellation)
     {
         await socket.SendAsync(Encoding.UTF8.GetBytes(command).AsMemory(), WebSocketMessageType.Text, true, cancellation);
         using var data = new MemoryStream();
@@ -515,6 +554,8 @@ public sealed class TilingService
         do
         {
             received = await socket.ReceiveAsync(buffer.AsMemory(), cancellation);
+            if (received.MessageType == WebSocketMessageType.Close)
+                throw new WebSocketException(WebSocketError.ConnectionClosedPrematurely, "The tiling engine closed its connection.");
             if (received.MessageType != WebSocketMessageType.Text)
                 throw new InvalidOperationException("The tiling engine returned an unexpected response.");
             data.Write(buffer, 0, received.Count);
@@ -525,7 +566,7 @@ public sealed class TilingService
         {
             var error = response.RootElement.TryGetProperty("error", out var detail) ? detail.GetString() : null;
             response.Dispose();
-            throw new InvalidOperationException(error ?? "The tiling command failed.");
+            throw new TilingCommandException(error ?? "The tiling command failed.");
         }
         return response;
     }
@@ -597,12 +638,9 @@ public sealed class TilingService
         return Math.Clamp(count, 1, 64);
     }
 
-    private sealed record WindowPosition(long Handle, int ProcessId, long ProcessStart, uint Flags, uint ShowCommand,
-        int MinX, int MinY, int MaxX, int MaxY, int Left, int Top, int Right, int Bottom);
-
     private static void SaveWindowPositions()
     {
-        var positions = new List<WindowPosition>();
+        var positions = new List<TilingWindowPosition>();
         WindowCallback callback = (window, parameter) =>
         {
             if (!IsWindowVisible(window) || GetWindow(window, 4 /* GW_OWNER */) != 0) return true;
@@ -627,26 +665,36 @@ public sealed class TilingService
     private static void RestoreWindowPositions(HashSet<long> managed)
     {
         if (!File.Exists(SnapshotPath)) return;
-        var positions = JsonSerializer.Deserialize<List<WindowPosition>>(File.ReadAllText(SnapshotPath)) ?? [];
-        foreach (var position in positions)
+        var positions = JsonSerializer.Deserialize<List<TilingWindowPosition>>(File.ReadAllText(SnapshotPath)) ?? [];
+        bool SameIdentity(TilingWindowPosition position)
         {
-            if (!managed.Contains(position.Handle) || !IsWindow((nint)position.Handle)) continue;
+            if (!IsWindow((nint)position.Handle)) return false;
             _ = GetWindowThreadProcessId((nint)position.Handle, out var id);
-            if (id != position.ProcessId) continue;
+            if (id != position.ProcessId) return false;
             try
             {
                 using var process = Process.GetProcessById(position.ProcessId);
-                if (process.StartTime.ToUniversalTime().Ticks != position.ProcessStart) continue;
-                var placement = new WindowPlacement
-                {
-                    Length = (uint)Marshal.SizeOf<WindowPlacement>(), Flags = position.Flags, ShowCommand = position.ShowCommand,
-                    MinPosition = new Point { X = position.MinX, Y = position.MinY },
-                    MaxPosition = new Point { X = position.MaxX, Y = position.MaxY },
-                    NormalPosition = new Rect { Left = position.Left, Top = position.Top, Right = position.Right, Bottom = position.Bottom }
-                };
-                _ = SetWindowPlacement((nint)position.Handle, in placement);
+                return process.StartTime.ToUniversalTime().Ticks == position.ProcessStart;
             }
-            catch (Exception error) when (error is Win32Exception or InvalidOperationException or ArgumentException) { }
+            catch (Exception error) when (error is Win32Exception or InvalidOperationException or ArgumentException) { return false; }
+        }
+        var remaining = TilingPositionRecovery.Restore(positions, managed, SameIdentity, position =>
+        {
+            var placement = new WindowPlacement
+            {
+                Length = (uint)Marshal.SizeOf<WindowPlacement>(), Flags = position.Flags, ShowCommand = position.ShowCommand,
+                MinPosition = new Point { X = position.MinX, Y = position.MinY },
+                MaxPosition = new Point { X = position.MaxX, Y = position.MaxY },
+                NormalPosition = new Rect { Left = position.Left, Top = position.Top, Right = position.Right, Bottom = position.Bottom }
+            };
+            return SetWindowPlacement((nint)position.Handle, in placement);
+        });
+        if (remaining.Count > 0)
+        {
+            var temporary = SnapshotPath + ".tmp";
+            File.WriteAllText(temporary, JsonSerializer.Serialize(remaining));
+            File.Move(temporary, SnapshotPath, overwrite: true);
+            throw new IOException($"Windows couldn't restore {remaining.Count} app position(s). Retry to restore the remaining windows.");
         }
     }
 

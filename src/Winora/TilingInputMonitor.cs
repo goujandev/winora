@@ -6,7 +6,14 @@ namespace Winora;
 // A focus-preserving move must stop if the user interacts with another app.
 // GlazeWM tags its own injected focus mouse event with 6379, which must not be
 // mistaken for user intent. Retain only an event counter, never input contents.
-internal sealed class TilingInputMonitor : IDisposable
+internal interface ITilingInputMonitor : IDisposable
+{
+    bool IsReliable { get; }
+    long Version { get; }
+    Task<bool> RearmAsync();
+}
+
+internal sealed class TilingInputMonitor : ITilingInputMonitor
 {
     private const uint Quit = 0x0012;
     private const uint RearmMessage = 0x8039; // Private thread message, no window.
@@ -44,12 +51,12 @@ internal sealed class TilingInputMonitor : IDisposable
         }
     }
 
-    internal bool IsReliable => Volatile.Read(ref reliable) != 0 && Volatile.Read(ref disposed) == 0 && thread.IsAlive;
-    internal long Version => Interlocked.Read(ref version);
+    public bool IsReliable => Volatile.Read(ref reliable) != 0 && Volatile.Read(ref disposed) == 0 && thread.IsAlive;
+    public long Version => Interlocked.Read(ref version);
 
     // Low-level hooks can be silently removed. Before a rare focus-preserving
     // move, positively establish fresh hooks rather than trusting old handles.
-    internal async Task<bool> RearmAsync()
+    public async Task<bool> RearmAsync()
     {
         RearmRequest request;
         lock (rearmLock)

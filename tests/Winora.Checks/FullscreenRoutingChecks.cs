@@ -127,6 +127,25 @@ internal static class FullscreenRoutingChecks
         plan = coordinator.Plan(available, [relocated], []);
         check(plan.Moves.Count == 0 && coordinator.Leases.Count == 0,
             "The coordinator forgets an explicitly overridden relocation rather than restoring it later");
+
+        coordinator = new FullscreenRoutingCoordinator([lease]);
+        var corrected = relocated with { MonitorId = "C", WorkspaceName = Workspace("C") };
+        check(coordinator.ObserveAutomaticPlacement(corrected)
+            && coordinator.Leases.Single().OriginalMonitorId == "A"
+            && coordinator.Plan(available, [corrected], []).Moves.Single().DestinationMonitorId == "A",
+            "A verified layout correction retains the game's original monitor across automatic moves");
+        var floated = corrected with { IsTiling = false, IsFloating = true };
+        check(coordinator.ObserveAutomaticPlacement(floated)
+            && coordinator.Plan(monitors, [floated], ["A"]).RetainedLeases.Single().AutomaticallyFloating,
+            "Automatic floating preserves the origin while fullscreen prevents return");
+        var floatReturn = coordinator.Plan(available, [floated], []).Moves.Single();
+        check(floatReturn.IsRestore && coordinator.Complete(floatReturn, AtDestination(floated, floatReturn))
+            && coordinator.Leases.Count == 0,
+            "An automatically floated app can return to its origin without being forcibly retiled");
+        coordinator = new FullscreenRoutingCoordinator([lease]);
+        check(!coordinator.ObserveAutomaticPlacement(corrected with { ProcessStart = corrected.ProcessStart + 1 })
+            && coordinator.Leases.Single() == lease,
+            "Automatic placement cannot rebind a restoration journal to a replaced window");
     }
 
     private static FullscreenRoutingMonitor Monitor(string id, bool fullscreen = false) => new(id, Workspace(id), fullscreen);

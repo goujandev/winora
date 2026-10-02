@@ -19,7 +19,6 @@ internal static class FullscreenRoutingWorker
     internal static string StatusPath => Path.Combine(TilingService.DirectoryPath, "fullscreen-routing-status.json");
     internal static string StopPath => Path.Combine(TilingService.DirectoryPath, "fullscreen-routing-stop.json");
     internal static string JournalPath => Path.Combine(TilingService.DirectoryPath, "fullscreen-routing-journal.json");
-    private static readonly TimeSpan Interval = TimeSpan.FromMilliseconds(250);
     private static TilingService.EngineSession? boundEngine;
     private static string? lastJournal;
 
@@ -47,24 +46,35 @@ internal static class FullscreenRoutingWorker
             EngineProcessStart: engine.StartTime.ToUniversalTime().Ticks);
         var leases = ReadJournal(engine);
         var detector = new FullscreenGameDetector();
-        using var layout = new TilingLayoutController(() => EngineMatches(engine));
+        Task AutomaticLayoutChangeAsync(TilingAutomaticChange change)
+        {
+            var index = leases.FindIndex(lease => lease.Id == change.Id && lease.Handle == change.Handle
+                && lease.ProcessId == change.ProcessId && lease.ProcessStart == change.ProcessStart);
+            if (index < 0) return Task.CompletedTask;
+            if (change.UserOverride) leases.RemoveAt(index);
+            else
+            {
+                var observed = new FullscreenRoutingWindow(change.Id, change.Handle, change.ProcessId, change.ProcessStart,
+                    change.MonitorId, change.Workspace, IsTiling: !change.Floating, IsFloating: change.Floating);
+                if (FullscreenRoutingPolicy.ObserveAutomaticPlacement(leases[index], observed) is { } updated) leases[index] = updated;
+            }
+            WriteJournal(engine, leases);
+            return Task.CompletedTask;
+        }
+        using var layout = new TilingLayoutController(() => EngineMatches(engine), automaticChange: AutomaticLayoutChangeAsync);
         var exitCode = 0;
         try
         {
             WriteStatus(status);
-            using (var metadata = await SendAsync("query app-metadata"))
-                if (metadata.RootElement.GetProperty("data").GetProperty("version").GetString() != TilingProvisioner.EngineVersion)
-                    throw new InvalidOperationException("Fullscreen routing found an unexpected tiling engine version.");
-            _ = await ReadSnapshotAsync([]);
             var initialSettings = Settings.Load();
-            await layout.ReconcileAsync(SendAsync, detector.Detect(initialSettings.FullscreenGameExecutables), initialSettings);
-            status = status with { Ready = true };
-            WriteStatus(status);
             var signature = "";
             var changedAt = DateTimeOffset.UtcNow;
             var routingWasEnabled = initialSettings.MoveTilesForFullscreenGames;
-            while (EngineMatches(engine) && !StopRequested(status))
+            bool Running() => EngineMatches(engine) && !StopRequested(status);
+            await TilingWorkerLoop.RunAsync(Running, async () =>
             {
+                using var mutation = await TilingMutationLock.AcquireAsync(() => !Running());
+                if (!Running()) return;
                 var settings = Settings.Load();
                 var fullscreen = detector.Detect(settings.FullscreenGameExecutables);
                 var nextSignature = string.Join(";", fullscreen.OrderBy(window => window.Handle)
@@ -76,7 +86,7 @@ internal static class FullscreenRoutingWorker
                 if (!settings.MoveTilesForFullscreenGames && leases.Count > 0)
                 {
                     var paused = (await ReadSnapshotAsync(fullscreen)).Paused;
-                    if (routingWasEnabled || !paused) await RestoreAsync(engine, leases, detector);
+                    if (routingWasEnabled || !paused) await RestoreAsync(engine, leases, detector, layout);
                     WriteJournal(engine, leases);
                     if (leases.Count > 0) message = "Some focused apps stayed on their current monitor";
                 }
@@ -87,7 +97,7 @@ internal static class FullscreenRoutingWorker
                     var plan = FullscreenRoutingPolicy.Plan(snapshot.Monitors, snapshot.Windows,
                         snapshot.GameMonitors, leases, enabled: true, paused: snapshot.Paused);
                     leases = plan.RetainedLeases.ToList();
-                    await ExecuteMovesAsync(plan.Moves, leases, engine, detector);
+                    await ExecuteMovesAsync(plan.Moves, leases, engine, detector, layout: layout);
                     WriteJournal(engine, leases);
                     var gameSources = snapshot.GameMonitors.Count;
                     var blockedFocus = snapshot.Windows.Any(window => snapshot.GameMonitors.Contains(window.MonitorId) &&
@@ -102,9 +112,20 @@ internal static class FullscreenRoutingWorker
                 routingWasEnabled = settings.MoveTilesForFullscreenGames;
                 var layoutMessage = await layout.ReconcileAsync(SendAsync, fullscreen, settings);
                 if (layoutMessage.Length > 0) message = message.Length > 0 ? message + " · " + layoutMessage : layoutMessage;
-                if (status.Message != message) { status = status with { Message = message }; WriteStatus(status); }
-                await Task.Delay(Interval);
-            }
+                if (!status.Ready || status.Message != message)
+                { status = status with { Ready = true, Message = message }; WriteStatus(status); }
+            }, error =>
+            {
+                status = status with { Message = $"Tiling checks reconnecting: {error.Message}" };
+                WriteStatus(status);
+            }, initialize: async () =>
+            {
+                using var metadata = await SendAsync("query app-metadata");
+                if (metadata.RootElement.GetProperty("data").GetProperty("version").GetString() != TilingProvisioner.EngineVersion)
+                    throw new InvalidOperationException("Fullscreen routing found an unexpected tiling engine version.");
+                status = status with { Ready = true };
+                WriteStatus(status);
+            });
         }
         catch (Exception error)
         {
@@ -118,7 +139,7 @@ internal static class FullscreenRoutingWorker
             {
                 if (EngineMatches(engine) && leases.Count > 0)
                 {
-                    await RestoreAsync(engine, leases, detector);
+                    await RestoreAsync(engine, leases, detector, layout);
                     if (leases.Count > 0)
                     {
                         var remaining = await ReadSnapshotAsync(detector.Detect(Settings.Load().FullscreenGameExecutables));
@@ -169,14 +190,14 @@ internal static class FullscreenRoutingWorker
                     throw new InvalidOperationException("The owned tiling configuration has an unexpected workspace name.");
                 monitors.Add(new(id, name, onMonitor.Length > 0));
                 if (onMonitor.Any(window => window.IsGame)) games.Add(id);
-                ReadWindows(workspace, id, name, fullscreen, foreground, windows);
+                ReadWindows(workspace, id, name, fullscreen, foreground, windows, device);
             }
         }
         return new(monitors, windows, games, paused);
     }
 
     private static void ReadWindows(JsonElement container, string monitor, string workspace,
-        IReadOnlyList<NativeFullscreenWindow> fullscreen, long foreground, List<FullscreenRoutingWindow> windows)
+        IReadOnlyList<NativeFullscreenWindow> fullscreen, long foreground, List<FullscreenRoutingWindow> windows, string device)
     {
         if (container.GetProperty("type").GetString() == "window")
         {
@@ -187,14 +208,16 @@ internal static class FullscreenRoutingWorker
                 IsVisible: container.GetProperty("displayState").GetString() is "shown" or "showing",
                 IsForeground: handle == foreground, IsGame: fullscreen.Any(window => window.Handle == handle && window.IsGame),
                 IsModelFocused: container.GetProperty("hasFocus").GetBoolean(),
-                IsDragging: container.TryGetProperty("activeDrag", out var drag) && drag.ValueKind != JsonValueKind.Null));
+                IsDragging: container.TryGetProperty("activeDrag", out var drag) && drag.ValueKind != JsonValueKind.Null,
+                IsFloating: container.GetProperty("state").GetProperty("type").GetString() == "floating", MonitorDevice: device));
         }
         else if (container.TryGetProperty("children", out var children))
-            foreach (var child in children.EnumerateArray()) ReadWindows(child, monitor, workspace, fullscreen, foreground, windows);
+            foreach (var child in children.EnumerateArray()) ReadWindows(child, monitor, workspace, fullscreen, foreground, windows, device);
     }
 
     private static async Task ExecuteMovesAsync(IReadOnlyList<FullscreenRoutingMove> moves,
-        List<FullscreenRoutingLease> leases, Process engine, FullscreenGameDetector detector, bool allowOccupiedDestinations = false)
+        List<FullscreenRoutingLease> leases, Process engine, FullscreenGameDetector detector, bool allowOccupiedDestinations = false,
+        TilingLayoutController? layout = null)
     {
         foreach (var move in moves)
         {
@@ -207,7 +230,8 @@ internal static class FullscreenRoutingWorker
             if (window is null || window.Handle != move.Window.Handle || window.ProcessId != move.Window.ProcessId ||
                 window.ProcessStart != move.Window.ProcessStart || window.WorkspaceName != move.Window.WorkspaceName ||
                 !FullscreenRoutingPolicy.SameMonitor(window.MonitorId, move.Window.MonitorId) || window.IsGame ||
-                !window.IsTiling || !window.IsVisible || window.IsForeground || window.IsModelFocused || window.IsDragging || before.Paused) continue;
+                !(window.IsTiling || move.IsRestore && move.Lease.AutomaticallyFloating && window.IsFloating)
+                || !window.IsVisible || window.IsForeground || window.IsModelFocused || window.IsDragging || before.Paused) continue;
             var destination = before.Monitors.FirstOrDefault(monitor => FullscreenRoutingPolicy.SameMonitor(monitor.Id, move.DestinationMonitorId));
             if (destination is null || destination.WorkspaceName != move.DestinationWorkspaceName ||
                 (!allowOccupiedDestinations && destination.IsFullscreen)) continue;
@@ -226,7 +250,9 @@ internal static class FullscreenRoutingWorker
             var observed = after.Windows.FirstOrDefault(candidate => candidate.Id == window.Id);
             if (observed is null || observed.Handle != window.Handle || observed.ProcessId != window.ProcessId ||
                 observed.ProcessStart != window.ProcessStart || observed.MonitorId != move.DestinationMonitorId ||
-                observed.WorkspaceName != move.DestinationWorkspaceName || !observed.IsTiling) continue;
+                observed.WorkspaceName != move.DestinationWorkspaceName
+                || !FullscreenRoutingPolicy.CanRestoreState(observed, move.Lease)) continue;
+            layout?.ObserveRoutingMove(observed);
             leases.RemoveAll(lease => lease.Id == observed.Id);
             if (!move.IsRestore) leases.Add(move.Lease);
             // Persist every acknowledged movement so a helper restart retains
@@ -236,7 +262,7 @@ internal static class FullscreenRoutingWorker
     }
 
     private static async Task RestoreAsync(Process engine, List<FullscreenRoutingLease> leases,
-        FullscreenGameDetector detector)
+        FullscreenGameDetector detector, TilingLayoutController layout)
     {
         var fullscreen = detector.Detect(Settings.Load().FullscreenGameExecutables);
         var snapshot = await ReadSnapshotAsync(fullscreen);
@@ -251,7 +277,7 @@ internal static class FullscreenRoutingWorker
                 leases.Clear();
                 leases.AddRange(plan.RetainedLeases);
                 var before = leases.Count;
-                await ExecuteMovesAsync(plan.Moves, leases, engine, detector, allowOccupiedDestinations: true);
+                await ExecuteMovesAsync(plan.Moves, leases, engine, detector, allowOccupiedDestinations: true, layout: layout);
                 if (leases.Count >= before) break;
             }
         }
@@ -315,7 +341,11 @@ internal static class FullscreenRoutingWorker
     }
 
     internal static void WriteStop(FullscreenRoutingStatus status) => WriteAtomic(StopPath, new FullscreenRoutingStop(status.ProcessId, status.ProcessStart));
-    private static void WriteStatus(FullscreenRoutingStatus status) => WriteAtomic(StatusPath, status);
+    private static void WriteStatus(FullscreenRoutingStatus status)
+    {
+        try { WriteAtomic(StatusPath, status); }
+        catch (IOException error) { Trace.WriteLine(error); }
+    }
     private static void WriteAtomic<T>(string path, T data)
         => WriteAtomicText(path, JsonSerializer.Serialize(data));
     private static void WriteAtomicText(string path, string text)

@@ -4,6 +4,27 @@ Development PC: Windows 11 25H2, build 26200.9457, x64.
 
 ## Experimental tiling (development branch)
 
+Architectural fixes verification (2026-10-02):
+
+- 159 production checks and 52 isolated Dev checks pass. Both configurations
+  compile with warnings treated as errors.
+- New checks cover transient IPC failures and orderly disconnects, ownership
+  rejection, startup while settings holds the mutation lock, shutdown while
+  waiting for that lock, and deferred settings closing during a transaction or
+  while idle.
+- Layout regression checks cover alternate arrangements for two to four windows,
+  monitor-scale gaps for a DPI-unaware app, retained manual split choices after
+  gap changes, and healthy-frame repair beside an unreadable HWND.
+- Routing checks verify that automatic migration and floating preserve the
+  original monitor while manual changes and replaced windows remain protected.
+  Recovery checks retain unsuccessful native position restores for retry without
+  requiring the original engine process. Configuration checks reserve inactive
+  monitor workspaces for hotplug.
+- These checks use simulated engine/native-window inputs and isolated Dev
+  preferences. Production settings and the running installed engine were
+  unaffected. Live fullscreen transitions, physical monitor hotplug and native
+  position restoration were not rerun for these fixes.
+
 Placement, layout and native-size verification (2026-10-02):
 
 - 135 production checks and 49 isolated Dev checks pass. Release and Development
